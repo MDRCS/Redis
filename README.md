@@ -58,3 +58,50 @@
     1- Strings in Redis :
 
     $ redis-cli # start cli of redis
+    - with String datatype We can GET values, SET values, and DEL values.
+
+![](./static/ops.png)
+![](./static/example_string.png)
+
+    2- Lists in Redis :
+
+    The operations that can be performed
+    on LISTs are typical of what we find in
+    almost any programming language. We
+    can push items to the front and the back
+    of the LIST with LPUSH/RPUSH; we can pop
+    items from the front and back of the list
+    with LPOP/RPOP; we can fetch an item at a given position with LINDEX; and we can fetch a range of items with LRANGE.
+
+    - Example :
+
+    redis-cli> rpush list-key item-0
+    redis-cli> rpush list-key item-1
+    redis-cli> rpush list-key item-2
+    redis-cli> lrange list-key 0 -1
+    redis-cli> lindex list-key 1
+    redis-cli> lpop list-key
+    redis-cli> lrange list-key 0 -1
+
+    3- Sets in Redis :
+
+    Redis SETs are unordered,
+    we can’t push and pop items from the
+    ends like we did with LISTs. Instead, we
+    add and remove items by value with the SADD and SREM commands. We can also find out whether an item is in the SET quickly with SISMEMBER, or fetch the entire set with SMEMBERS (this can be slow for large SETs, so be careful).
+
+![](./static/SET_OPS.png)
+![](./static/example_set.png)
+
+    - As you can probably guess based on the STRING and LIST sections, SETs have many other uses beyond adding and removing items. Three commonly used operations with SETs include intersection, union, and difference (SINTER, SUNION, and SDIFF, respec- tively).
+
+    4- Hashes in Redis :
+
+![](./static/hashes.png)
+![](./static/example_hashes.png)
+
+    5- Sorted sets or ZSET in Redis :
+
+![](./static/ZSET.png)
+
+    
