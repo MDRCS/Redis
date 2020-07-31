@@ -55,4 +55,6 @@
 
     $ sudo python -m easy_install redis hiredis (hiredis is an optional performance-improving C library).
 
+    1- Strings in Redis :
 
+    $ redis-cli # start cli of redis
