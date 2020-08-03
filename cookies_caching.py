@@ -1,4 +1,5 @@
 import time
+import urllib
 
 
 def to_bytes(x):
@@ -90,7 +91,92 @@ def add_to_cart(conn, session, item, count):
         conn.hrem('cart:' + session, item)  # A
     else:
         conn.hset('cart:' + session, item, count)  # B
+
+
 # <end id="_1311_14471_8279"/>
 # A Remove the item from the cart
 # B Add the item to the cart
+# END
+
+
+# <start id="_1311_14471_8271"/>
+def clean_full_sessions(conn):
+    while not QUIT:
+        size = conn.zcard('recent:')
+        if size <= LIMIT:
+            time.sleep(1)
+            continue
+
+        end_index = min(size - LIMIT, 100)
+        sessions = conn.zrange('recent:', 0, end_index - 1)
+
+        session_keys = []
+        for sess in sessions:
+            sess = to_str(sess)
+            session_keys.append('viewed:' + sess)
+            session_keys.append('cart:' + sess)  # A
+
+        conn.delete(*session_keys)
+        conn.hdel('login:', *sessions)
+        conn.zrem('recent:', *sessions)
+
+
+# <end id="_1311_14471_8271"/>
+# A The required added line to delete the shopping cart for old sessions
+# END
+
+# --------------- Below this line are helpers to test the code ----------------
+
+def extract_item_id(request):
+    parsed = urllib.parse.urlparse(request)
+    query = urllib.parse.parse_qs(parsed.query)
+    return (query.get('item') or [None])[0]
+
+
+def is_dynamic(request):
+    parsed = urllib.parse.urlparse(request)
+    query = urllib.parse.parse_qs(parsed.query)
+    return '_' in query
+
+
+def hash_request(request):
+    return str(hash(request))
+
+
+# <start id="_1311_14471_8289"/>
+def can_cache(conn, request):
+    item_id = extract_item_id(request)  # A
+    if not item_id or is_dynamic(request):  # B
+        return False
+    rank = conn.zrank('viewed:', item_id)  # C
+    return rank is not None and rank < 10000  # D
+
+
+# <end id="_1311_14471_8289"/>
+# A Get the item id for the page, if any
+# B Check whether the page can be statically cached, and whether this is an item page
+# C Get the rank of the item
+# D Return whether the item has a high enough view count to be cached
+# END
+
+# <start id="_1311_14471_8291"/>
+def cache_request(conn, request, callback):
+    if not can_cache(conn, request):  # A
+        return callback(request)  # A
+
+    page_key = 'cache:' + hash_request(request)  # B
+    content = conn.get(page_key)  # C
+
+    if not content:
+        content = callback(request)  # D
+        conn.setex(page_key, 300, content)  # E
+
+    return content  # F
+# <end id="_1311_14471_8291"/>
+# A If we cannot cache the request, immediately call the callback
+# B Convert the request into a simple string key for later lookups
+# C Fetch the cached content if we can, and it is available
+# D Generate the content if we can't cache the page, or if it wasn't cached
+# E Cache the newly generated content if we can cache it
+# F Return the content
 # END
