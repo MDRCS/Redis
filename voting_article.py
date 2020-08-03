@@ -12,14 +12,16 @@ Redis data structures that we used are are :
 """
 
 
-def article_vote(conn, user, article):
+def article_vote(conn, user, article, vote='up'):
     cutoff = time.time() - ONE_WEEK_IN_SECONDS
     if conn.zscore('time:', article) < cutoff:  # if the article is oldest than one week you cannot update it 's score
         return
 
     article_id = article.partition(':')[-1]
     if conn.sadd('voted:' + article_id, user):  # if the article ever was voted by this user
-        conn.zincrby('score:', VOTE_SCORE, article)  # increment ZSET of this article by VOTE_SCORE
+        if vote == 'up':
+            conn.zincrby('score:', VOTE_SCORE, article)  # increment ZSET of this article by VOTE_SCORE
+        conn.zdecrby('score:', VOTE_SCORE, article)  # increment ZSET of this article by VOTE_SCORE
         conn.hincrby(article, 'votes', 1)
 
 
