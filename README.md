@@ -211,4 +211,42 @@
 
 ![](./static/update_token.png)
 
+    +++ And you know what? That’s it. We’ve now recorded when a user with the given session last viewed an item and what item that user most recently looked at. On a server made in the last few years, you can record this information for at least 20,000 item views every second, which is more than three times what we needed to perform against the database. This can be made even faster, which we’ll talk about later. But even for this version,
+        we’ve improved performance by 10–100 times over a typical relational data- base in this context.
+
+
+    Over time, memory use will grow, and we’ll want to clean out old data. As a way of limiting our data, we’ll only keep the most recent 10 million sessions.1 For our cleanup, we’ll fetch the size of the ZSET in a loop. If the ZSET is too large, we’ll fetch the oldest items up to 100 at a time (because we’re using timestamps, this is just the first 100 items in the ZSET), remove them from the recent ZSET, delete the login tokens from the login HASH,
+    and delete the relevant viewed ZSETs. If the ZSET isn’t too large, we’ll sleep for one second and try again later. The code for cleaning out old ses- sions is shown next.
+
+    ZCARD key
+    Time complexity: O(1)
+
+    Returns the sorted set cardinality (number of elements) of the sorted set stored at key.
+
+    +++ Scaling a simple algorithm :
+
+    How could something so simple scale to handle five million users daily? Let’s check the numbers.
+    If we expect five million unique users per day, then in two days (if we always get new users every day),
+    we’ll run out of space and will need to start deleting tokens. In one day there are 24 x 3600 = 86,400 seconds,
+    so there are 5 million / 86,400 < 58 new sessions every second on average.
+    If we ran our cleanup function every second (as our code implements),
+    we’d clean up just under 60 tokens every second. But this code can actually clean up more than 10,000 tokens per second across a network,
+    and over 60,000 tokens per second locally, which is 150–1,000 times faster than we need.
+
+    - Another solution | EXPIRE :
+    -- EXPIRING DATA IN REDIS As you learn more about Redis, you’ll likely discover that some of the solutions we present aren’t the only ways to solve the prob- lem. In this case, we could omit the recent ZSET,
+       store login tokens as plain key-value pairs, and use Redis EXPIRE to set a future date or time to clean out both sessions and our recently viewed ZSETs. But using EXPIRE prevents us from explicitly limiting
+       our session information to 10 million users, and pre- vents us from performing abandoned shopping cart analysis during session expiration, if necessary in the future.
+
+    2.2 Shopping carts in Redis
+
+    The use of shopping cart cookies is common, as is the storage of the entire cart itself in the cookie. One huge advantage to storing shopping carts in cookies is that you don’t need to write to a database to keep them.
+    But one of the disadvantages is that you also need to keep reparsing and validating the cookie to ensure that it has the proper format and contains items that can actually be purchased. Yet another disad- vantage is that
+    cookies are passed with every request, which can slow down request sending and processing for large cookies.
+
+    Because we’ve had such good luck with session cookies and recently viewed items, we’ll push our shopping cart information into Redis. Since we’re already keeping user session cookies in Redis (along with recently viewed items),
+    we can use the same cookie ID for referencing the shopping cart.
+    The shopping cart that we’ll use is simple: it’s a HASH that maps an item ID to the quantity of that item that the customer would like to purchase. We’ll have the web application handle validation for item count, so we only need
+    to update counts in the cart as they change. If the user wants more than 0 items, we add the item(s) to the HASH (replacing an earlier count if it existed). If not, we remove the entry from the hash. Our add_to_cart() function can be seen in this listing.
+
 
