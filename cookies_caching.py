@@ -1,3 +1,4 @@
+import json
 import time
 import urllib
 
@@ -172,6 +173,8 @@ def cache_request(conn, request, callback):
         conn.setex(page_key, 300, content)  # E
 
     return content  # F
+
+
 # <end id="_1311_14471_8291"/>
 # A If we cannot cache the request, immediately call the callback
 # B Convert the request into a simple string key for later lookups
@@ -180,3 +183,58 @@ def cache_request(conn, request, callback):
 # E Cache the newly generated content if we can cache it
 # F Return the content
 # END
+
+# <start id="_1311_14471_8287"/>
+def schedule_row_cache(conn, row_id, delay):
+    conn.zadd('delay:', {row_id: delay})  # A
+    conn.zadd('schedule:', {row_id: time.time()})  # B
+
+
+# <end id="_1311_14471_8287"/>
+# A Set the delay for the item first
+# B Schedule the item to be cached now
+# END
+
+# <start id="_1311_14471_8292"/>
+def cache_rows(conn):
+    while not QUIT:
+        next = conn.zrange('schedule:', 0, 0, withscores=True)  # A
+        now = time.time()
+        if not next or next[0][1] > now:
+            time.sleep(.05)  # B
+            continue
+
+        row_id = next[0][0]
+        row_id = to_str(row_id)
+        delay = conn.zscore('delay:', row_id)  # C
+        if delay <= 0:
+            conn.zrem('delay:', row_id)  # D
+            conn.zrem('schedule:', row_id)  # D
+            conn.delete('inv:' + row_id)  # D
+            continue
+
+        row = Inventory.get(row_id)  # E
+        conn.zadd('schedule:', {row_id: now + delay})  # F
+        row = {to_str(k): to_str(v) for k, v in row.to_dict().items()}
+        conn.set('inv:' + row_id, json.dumps(row))  # F
+
+
+# <end id="_1311_14471_8292"/>
+# A Find the next row that should be cached (if any), including the timestamp, as a list of tuples with zero or one items
+# B No rows can be cached now, so wait 50 milliseconds and try again
+# C Get the delay before the next schedule
+# D The item shouldn't be cached anymore, remove it from the cache
+# E Get the database row
+# F Update the schedule and set the cache value
+# END
+
+class Inventory(object):
+    def __init__(self, id):
+        self.id = id
+
+    @classmethod
+    def get(cls, id):
+        return Inventory(id)
+
+    def to_dict(self):
+        return {'id': self.id, 'data': 'data to cache...', 'cached': time.time()}
