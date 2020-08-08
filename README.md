@@ -301,4 +301,30 @@
     With the combination of a scheduling function and a continuously running caching function, we’ve added a repeating scheduled autocaching mechanism. With these two functions, inventory rows can be updated as frequently as we think is reasonable. For a daily deal with inventory counts being reduced and affecting whether someone can buy the item, it probably makes sense to update
     the cached row every few seconds if there are many buyers. But if the data doesn’t change often, or when back-ordered items are acceptable, it may make sense to only update the cache every minute. Both are possible with this simple method.
 
+    2.5 Web page analytics :
 
+    As people come to the websites that we build, interact with them, maybe even pur- chase something from them, we can learn valuable information. For example, if we only pay attention to pages that get the most views, we can try to change the way the pages are formatted, what colors are being used, maybe even change what other links are shown on the pages. Each one of these changes can
+    lead to a better or worse expe- rience on a page or subsequent pages, or even affect buying behavior.
+
+    + The line we need to add to update_token() :
+
+    -> conn.zincrby('viewed:', item, -1)
+
+    With this one line added, we now have a record of all of the items that are viewed. Even more useful, that list of items is ordered by the number of times that people have seen the items, with the most-viewed item having the lowest score, and thus hav- ing an index of 0. Over time, some items will be seen many times and others rarely. Obviously we only want to cache commonly seen items,
+    but we also want to be able to discover new items that are becoming popular, so we know when to cache them.
+
+    To keep our top list of pages fresh, we need to trim our list of viewed items, while at the same time adjusting the score to allow new items to become popular. You already know how to remove items from the ZSET from section 2.1, but rescaling is new. ZSETs have a function called ZINTERSTORE, which lets us combine one or more ZSETs and mul- tiply every score in the input ZSETs by a given number.
+    (Each input ZSET can be multi- plied by a different number.) Every 5 minutes, let’s go ahead and delete any item that isn’t in the top 20,000 items, and rescale the view counts to be half has much as they were before. The following listing will both delete items and rescale remaining scores.
+
+![](./static/can_cache_update.png)
+
+    ++ With the rescaling and the counting, we now have a constantly updated list of the most-frequently viewed items at Fake Web Retailer. Now all we need to do is to update our can_cache() function to take into consideration our new method of deciding whether a page can be cached, and we’re done. You can see our new can_cache() function here.
+
+![](./static/rescale_viewed.png)
+
+![](./static/can_cache_update.png)
+
+    - IMPORTANT, Summary :
+
+    +++ And with that final piece, we’re now able to take our actual viewing statistics and only cache those pages that are in the top 10,000 product pages. If we wanted to store even more pages with minimal effort, we could compress the pages before storing them in Redis, use a technology called edge side includes to remove parts of our pages, or we could pre-optimize our templates
+        to get rid of unnecessary whitespace. Each of these techniques and more can reduce memory use and increase how many pages we could store in Redis, all for additional performance improvements as our site grows.

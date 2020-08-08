@@ -29,6 +29,7 @@ def update_token(conn, token, user, item=None):
     if item:
         conn.zadd('viewed:' + token, {item: timestamp})  # D
         conn.zremrangebyrank('viewed:' + token, 0, -26)  # E
+        conn.zincrby('viewed:', item, -1)  # F
 
 
 # <end id="_1311_14471_8265"/>
@@ -37,6 +38,7 @@ def update_token(conn, token, user, item=None):
 # C Record when the token was last seen
 # D Record that the user viewed the item
 # E Remove old items, keeping the most recent 25
+# F incrementing score of the viewed item by -1 so the most popular items have the lowest score.
 # END
 
 
@@ -220,13 +222,26 @@ def cache_rows(conn):
 
 
 # <end id="_1311_14471_8292"/>
-# A Find the next row that should be cached (if any), including the timestamp, as a list of tuples with zero or one items
+# A Find the next row that should be cached (if any), including the timestamp,
+# as a list of tuples with zero or one items
 # B No rows can be cached now, so wait 50 milliseconds and try again
 # C Get the delay before the next schedule
 # D The item shouldn't be cached anymore, remove it from the cache
 # E Get the database row
 # F Update the schedule and set the cache value
 # END
+
+# <start id="_1311_14471_8288"/>
+def rescale_viewed(conn):
+    while not QUIT:
+        conn.zremrangebyrank('viewed:', 20000, -1)      #A  save just 20000 items that have the lowest score and are the most popular
+        conn.zinterstore('viewed:', {'viewed:': .5})    #B
+        time.sleep(300)                                 #C
+# <end id="_1311_14471_8288"/>
+#A Remove any item not in the top 20,000 viewed items
+#B Rescale all counts to be 1/2 of what they were before
+#C Do it again in 5 minutes
+#END
 
 class Inventory(object):
     def __init__(self, id):
