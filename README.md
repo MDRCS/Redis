@@ -401,4 +401,40 @@ ZSETs offer the ability to store a mapping of members to scores (similar to the 
     It’s for these two reasons that we write two different methods to handle reliable message delivery in chapter 6, which works in the face of network disconnections, and which won’t cause Redis memory to grow (even in older versions of Redis) unless you want it to.
     If you like the simplicity of using PUBLISH/SUBSCRIBE, and you’re okay with the chance that you may lose a little data, then feel free to use pub/sub instead of our methods, as we also do in section 8.5; just remember to configure client-output- buffer-limit pubsub reasonably before starting.
 
+    Consider the producer is producing the messages at a crazy level and let’s say due to some outage all consumers went down for a toss.
+    In case of Kafka the messages will be persisted until the consumer polls for it and will be queued up in the broker’s disk storage.
+    In case of Redis pub-sub, if the consumers are down the broker will swallow the messages and the consumer can never get the lost message.
+
+    8- Sorting :
+    SORT allows us to sort LISTs, SETs, and ZSETs according to data in the LIST/SET/ZSET data stored in STRING keys, or even data stored in HASHes. If you’re coming from a relational database background, you can think of SORT as like the order by clause in a SQL statement that can reference other rows and tables.
+
+![](./static/sorting.png)
+![](./static/examples_sorting_continu.png)
+![](./static/examples_sorting.png)
+
+    ++ Basic Redis transactions :
+    Sometimes we need to make multiple calls to Redis in order to manipulate multiple structures at the same time. Though there are a few commands to copy or move items between keys, there isn’t a single command to move items between types (though you can copy from a SET to a ZSET with ZUNIONSTORE).
+    For operations involving multiple keys (of the same or different types), Redis has five commands that help us operate on multiple keys without interruption: WATCH, MULTI, EXEC, UNWATCH, and DISCARD.
+
+    - To perform a transaction in Redis, we first call MULTI, followed by any sequence of commands we intend to execute, followed by EXEC. When seeing MULTI, Redis will queue up commands from that same connection until it sees an EXEC, at which point Redis will execute the queued commands sequentially without interruption.
+    - python syntax : Seman- tically, our Python library handles this by the use of what’s called a pipeline.
+
+![](./static/no_transaction.png)
+
+    !! --> Without transactions, each of the three threads are able to increment the notrans: counter before the decrement comes through. We exaggerate potential issues here by including a 100ms sleep, but if we needed to be able to perform these two calls with- out other commands getting in the way, we’d have issues.
+    The following listing shows these same operations with a transaction.
+
+![](./static/transaction.png)
+![](./static/transaction_continu.png)
+
+    When writing data to Redis, sometimes the data is only going to be useful for a short period of time. We can manually delete this data after that time has elapsed, or we can have Redis automatically delete the data itself by using key expiration.
+
+    9- Expiring keys :
+
+    When writing data into Redis, there may be a point at which data is no longer needed. We can remove the data explicitly with DEL, or if we want to remove an entire key after a specified timeout, we can use what’s known as expiration. When we say that a key has a time to live, or that it’ll expire at a given time,
+    we mean that Redis will automatically delete the key when its expiration time has arrived.
+
+![](./static/expiring_keys.png)
+![](./static/example_expiring_key.png)
+
 
