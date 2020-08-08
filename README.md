@@ -386,4 +386,19 @@ ZSETs offer the ability to store a mapping of members to scores (similar to the 
 
     ++ our aggregate is the default of sum, so scores are added.
 
+    6- Publish/subscribe :
+    Generally, the concept of publish/ subscribe, also known as pub/sub, is characterized by listeners subscribing to channels, with publishers sending binary string messages to channels. Anyone listening to a given channel will receive all messages sent to that channel while they’re connected and lis- tening.
+
+    In Redis, the pub/sub concept has been included through the use of a collection of the five commands shown in table 3.11.
+
+![](./static/pub_sub_ops.png)
+![](./static/pubsub_example.png)
+
+    -- If PUBLISH and SUBSCRIBE are so useful, why don’t we use them very much? There are two reasons.
+       One reason is because of Redis system reliability. In older versions of Redis, a client that had subscribed to channels but didn’t read sent messages fast enough could cause Redis itself to keep a large outgoing buffer. If this outgoing buffer grew too large, it could cause Redis to slow down drastically or crash, could cause the operating system to kill Redis, and could even cause the operating system itself to become unus- able. Modern versions of Redis don’t have this issue, and will disconnect subscribed clients that are unable to keep up with the client-output-buffer-limit pubsub configuration option
+
+    -- The second reason is for data transmission reliability. Within any sort of net- worked system, you must operate under the assumption that your connection could fail at some point. Typically, this is handled by one side or the other reconnecting as a result of a connection error. Our Python Redis client will normally handle connec- tion issues well by automatically reconnecting on failure, automatically handling con- nection pooling (we’ll talk about this more in chapter 4), and more. But in the case of clients that have subscribed, if the client is disconnected and a message is sent before it can reconnect, the client will never see the message. When you’re relying on receiving messages over a channel, the semantics of PUBLISH/SUBSCRIBE in Redis may let you down.
+    It’s for these two reasons that we write two different methods to handle reliable message delivery in chapter 6, which works in the face of network disconnections, and which won’t cause Redis memory to grow (even in older versions of Redis) unless you want it to.
+    If you like the simplicity of using PUBLISH/SUBSCRIBE, and you’re okay with the chance that you may lose a little data, then feel free to use pub/sub instead of our methods, as we also do in section 8.5; just remember to configure client-output- buffer-limit pubsub reasonably before starting.
+
 
