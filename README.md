@@ -328,3 +328,62 @@
 
     +++ And with that final piece, we’re now able to take our actual viewing statistics and only cache those pages that are in the top 10,000 product pages. If we wanted to store even more pages with minimal effort, we could compress the pages before storing them in Redis, use a technology called edge side includes to remove parts of our pages, or we could pre-optimize our templates
         to get rid of unnecessary whitespace. Each of these techniques and more can reduce memory use and increase how many pages we could store in Redis, all for additional performance improvements as our site grows.
+
+### + Core concepts - Commands in Redis :
+
+
+    1- Strings :
+
+    In Redis, STRINGs are used to store three types of values:
+    ■ Byte string values
+    ■ Integer values
+    ■ Floating-point values
+
+![](./static/string_ops.png)
+![](./static/string_ops_res.png)
+
+    - if you call incr() func with arguments the func will automatically call incrbyfloat() or incrbyinteger() depands on integer.
+
+![](./static/substring_ops.png)
+
+    -> GETRANGE AND SUBSTR In the past, GETRANGE was named SUBSTR, and the Python client continues to use the substr() method name to fetch ranges from the string. When using a version of Redis later than 2.6, you should use the get- range() method, and use substr() for Redis versions before 2.6.
+
+2- Lists :
+
+![](./static/list_ops.png)
+![](./static/list_ops_res.png)
+![](./static/other_list_ops.png)
+
+![](./static/simul.png)
+
+3- Sets :
+
+![](./static/set_ops_redis.png)
+![](./static/set_ops_res_redis.png)
+![](./static/simul_set.png)
+
+![](./static/sets_ops.png)
+![](./static/sets_ops_res.png)
+![](./static/simul_sets.png)
+
+    4- Hashes :
+    ++ HASHes in Redis allow you to store groups of key-value pairs in a single higher-level Redis key. Functionally, the values offer some of the same features as values in STRINGs and can be useful to group related data together. This data grouping can be thought of as being similar to a row in a relational database or a document in a document store.
+
+![](./static/hashes_ops.png)
+![](./static/simul_hashes_ops.png)
+![](./static/hashes_bulk_ops.png)
+![](./static/simul_hashes_bulk_ops.png)
+
+
+5- Sorted sets :
+ZSETs offer the ability to store a mapping of members to scores (similar to the keys and values of HASHes). These mappings allow us to manipulate the numeric scores,2 and fetch and scan over both members and scores based on the sorted order of the scores.
+
+![](./static/zset_ops.png)
+![](./static/simul_zset.png)
+![](./static/cont.png)
+![](./static/zset_ops_ranges.png)
+![](./static/sets_stores_ops.png)
+
+    ++ our aggregate is the default of sum, so scores are added.
+
+
