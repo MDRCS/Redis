@@ -437,4 +437,128 @@ ZSETs offer the ability to store a mapping of members to scores (similar to the 
 ![](./static/expiring_keys.png)
 ![](./static/example_expiring_key.png)
 
+### + Keeping data safe and ensuring performance :
+
+    1- Persistence options :
+
+    Within Redis, there are two different ways of persisting data to disk. One is a method called snapshotting that takes the data as it exists at one moment in time and writes it to disk. The other method is called AOF, or append-only file, and it works by copying incoming write commands to disk as they happen. These methods can be used together,
+    separately, or not at all in some circumstances. Which to choose will depend on your data and your application.
+
+    + Why to persist data on memory :
+
+    One of the primary reasons why you’d want to store in-memory data on disk is so that you have it later, or so that you can back it up to a remote location in the case of failure. Additionally, the data that’s stored in Redis may have taken a long time to compute, or may be in the process of computation, and you may want to have access to it later without having to compute it again.
+    Example : For some Redis uses, “computation” may simply involve an act of copying data from another database into Redis, but for others, Redis could be storing aggregate analytics data from billions of log lines.
+
+![](./static/persistence_conf.png)
+
+    1-1 Persisting to disk with snapshots :
+
+    In Redis, we can create a point-in-time copy of in-memory data by creating a snapshot.
+    After creation, these snapshots can be backed up, copied to other servers to create a clone of the server, or left for a future restart.
+
+    - Crash Problems :
+     Until the next snapshot is performed, data written to Redis since the last snapshot started (and completed) would be lost if there were a crash caused by Redis, the system, or the hardware.
+
+    - There are five methods to initiate a snapshot, which are listed as follows:
+
+    ■ Any Redis client can initiate a snapshot by calling the BGSAVE command. On platforms that support BGSAVE (basically all platforms except for Windows), Redis will fork,1 and the child process will write the snapshot to disk while the parent process continues to respond to commands.
+    ■ A Redis client can also initiate a snapshot by calling the SAVE command, which causes Redis to stop responding to any/all commands until the snapshot com- pletes. This command isn’t commonly used, except in situations where we need our data on disk, and either we’re okay waiting
+      for it to complete, or we don’t have enough memory for a BGSAVE.
+    ■ If Redis is configured with save lines, such as save 60 10000, Redis will auto- matically trigger a BGSAVE operation if 10,000 writes have occurred within 60 seconds since the last successful save has started (using the configuration option described). When multiple save lines are present,
+      any time one of the rules match, a BGSAVE is triggered.
+    ■ When Redis receives a request to shut down by the SHUTDOWN command, or it receives a standard TERM signal, Redis will perform a SAVE, blocking clients from performing any further commands, and then shut down.
+    ■ If a Redis server connects to another Redis server and issues the SYNC command to begin replication, the master Redis server will start a BGSAVE operation if one isn’t already executing or recently completed.
+
+    ++ When using only snapshots for saving data, you must remember that if a crash were to happen, you’d lose any data changed since the last snapshot. For some applications, this kind of loss isn’t acceptable, and you should look into using append-only file per- sistence,
+       But if your application can live with data loss, snapshots can be the right answer. Let’s look at a few scenarios and how you may want to configure Redis to get the snapshot persistence behavior you’re looking for.
+
+    Examples - Explore diffrent persistence options :
+
+    + DEVELOPMENT :
+    For my personal development server, I’m mostly concerned with minimizing the over- head of snapshots. To this end, and because I generally trust my hardware, I have a single rule: save 900 1. The save option tells Redis that it should perform a BGSAVE operation based on the subsequent two values.
+    In this case, if at least one write has occurred in at least 900 seconds (15 minutes) since the last BGSAVE, Redis will auto- matically start a new BGSAVE.
+    If you’re planning on using snapshots on a production server, and you’re going to be storing a lot of data, you’ll want to try to run a development server with the same or similar hardware, the same save options, a similar set of data, and a similar expected load. By setting up an environment
+    equivalent to what you’ll be running in produc- tion, you can make sure that you’re not snapshotting too often (wasting resources) or too infrequently (leaving yourself open for data loss).
+
+    + AGGREGATING LOGS :
+    In the case of aggregating log files and analysis of page views, we really only need to ask ourselves how much time we’re willing to lose if something crashes between dumps. If we’re okay with losing up to an hour of work, then we can use save 3600 1 (there are 3600 seconds in an hour). But how might we recover if we were process- ing logs?
+    To recover from data loss, we need to know what we lost in the first place. To know what we lost, we need to keep a record of our progress while processing logs. Let’s imagine that we have a function that’s called when new logs are ready to be pro- cessed. This function is provided with a Redis connect, a path to where log files are stored,
+    and a callback that will process individual lines in the log file. With our func- tion, we can record which file we’re working on and the file position information as we’re processing. A log-processing function that records this information can be seen in the next listing.
+
+![](./static/progress_logs.png)
+
+    By keeping a record of our progress in Redis, we can pick up with processing logs if at any point some part of the system crashes. And because we used MULTI/EXEC pipelines as introduced in chapter 3, we ensure that the dump will only include processed log information when it also includes progress information.
+
+
+    + BIG DATA :
+    When the amount of data that we store in Redis tends to be under a few gigabytes, snapshotting can be the right answer. Redis will fork, save to disk, and finish the snap- shot faster than you can read this sentence. But as our Redis memory use grows over time, so does the time to perform a fork operation for the BGSAVE.
+    In situations where Redis is using tens of gigabytes of memory, there isn’t a lot of free memory, or if we’re running on a virtual machine, letting a BGSAVE occur may cause the system to pause for extended periods of time, or may cause heavy use of system virtual memory, which could degrade Redis’s performance to the point where it’s unusable.
+
+    So if we’re using 20 gigabytes of memory with Redis, running BGSAVE on standard hardware will pause Redis for 200–400 milliseconds for the fork. If we’re using Redis inside a Xen-virtualized machine (as is the case with Amazon EC2 and some other cloud providers), that same fork will cause Redis to pause for 4–6 seconds. You need to decide for your application whether this pause is okay.
+
+    - Delay blocking Problem and resources conflict :
+
+    To prevent forking from causing such issues, we may want to disable automatic sav- ing entirely. When automatic saving is disabled, we then need to manually call BGSAVE (which has all of the same potential issues as before, only now we know when they will happen), or we can call SAVE. With SAVE, Redis does block until the save is completed, but because there’s no fork, there’s no fork delay.
+    And because Redis doesn’t have to fight with itself for resources, the snapshot will finish faster.
+
+    - Save vs BGSAVE :
+
+    As a point of personal experience, I’ve run Redis servers that used 50 gigabytes of memory on machines with 68 gigabytes of memory inside a cloud provider running Xen virtualization. When trying to use BGSAVE with clients writing to Redis, forking would take 15 seconds or more, followed by 15–20 minutes for the snapshot to com- plete. But with SAVE, the snapshot would finish in 3–5 minutes.
+    For our use, a daily snapshot at 3 a.m. was sufficient, so we wrote scripts that would stop clients from try- ing to access Redis, call SAVE, wait for the SAVE to finish, back up the resulting snap- shot, and then signal to the clients that they could continue.
+    Snapshots are great when we can deal with potentially substantial data loss in Redis, but for many applications, 15 minutes or an hour or more of data loss or pro- cessing time is too much. To allow Redis to keep more up-to-date information about data in memory stored on disk, we can use append-only file persistence.
+
+    2- Append-only file persistence :
+
+    In basic terms, append-only log files keep a record of data changes that occur by writ- ing each change to the end of the file. In doing this, anyone could recover the entire dataset by replaying the append-only log from the beginning to the end. Redis has functionality that does this as well, and it’s enabled by setting the configuration option appendonly yes.
+
+    ++ FILE SYNCING : When writing files to disk, at least three things occur. The first is writing to a buffer, and this occurs when calling file.write() or its equivalent in other languages. When the data is in the buffer, the operating system can take that data and write it to disk at some point in the future. We can optionally take a second step and ask
+                      the operating system to write the data provided to disk when it next has a chance, with file.flush(), but this is only a request. Because data isn’t actually on disk until the operating system writes it to disk, we can tell the operating system to “sync” the files to disk, which will block until it’s completed. When that sync is completed,
+                      we can be fairly certain that our data is on disk and we can read it later if the system otherwise fails.
+
+![](./static/files_sync_options.png)
+
+    + limit of writes for 'always' option :
+    If we were to set appendfsync always, every write to Redis would result in a write to disk, and we can ensure minimal data loss if Redis were to crash. Unfortunately, because we’re writing to disk with every write to Redis, we’re limited by disk perfor- mance, which is roughly 200 writes/second for a spinning disk, and maybe a few tens of thousands for an SSD (a solid-state drive).
+
+    WARNING: SSDS AND appendfsync always You’ll want to be careful if you’re using SSDs with appendfsync always. Writing every change to disk as they happen, instead of letting the operating system group writes together as is the case with the other appendfsync options, has the potential to cause an extreme form of what is known as write amplification. By writing small amounts of data to the end of a file,
+             you can reduce the lifetime of SSDs from years to just a few months in some cases.
+
+    - Every sec option :
+
+    As a reasonable compromise between keeping data safe and keeping our write performance high, we can also set appendfsync everysec. This configuration will sync the append-only log once every second.
+    For most common uses, we’ll likely not find sig- nificant performance penalties for syncing to disk every second compared to not using any sort of persistence.
+    By syncing to disk every second, if the system were to crash, we could lose at most one second of data that had been written or updated in Redis.
+    Also, in the case where the disk is unable to keep up with the write volume that’s happening, Redis would gracefully slow down to accommodate the maximum write rate of the drive.
+
+    - No Option :
+
+    As you may guess, when setting appendfsync no, Redis doesn’t perform any explicit file syncing, leaving everything up to the operating system. There should be no performance penalties in this case, though if the system were to crash in one way or another, we’d lose an unknown and unpredictable amount of data. And if we’re using a hard drive that isn’t fast enough for our write load,
+    Redis would perform fine until the buffers to write data to disk were filled, at which point Redis would get very slow as it got blocked from writing. For these reasons, I generally discourage the use of this configuration option, and include its description and semantics here for completeness.
+
+    2-1 Rewriting/compacting append-only files :
+
+    - Growing file size problem, append-only persistence :
+    After reading about AOF persistence, you’re probably wondering why snapshots exist at all. If by using append-only files we can minimize our data losses to one second (or essentially none at all), and minimize the time it takes to have data persisted to disk on a regular basis, it would seem that our choice should be clear. But the choice is actually not so simple:
+    because every write to Redis causes a log of the command to be written to disk, the append-only log file will continuously grow. Over time, a growing AOF could cause your disk to run out of space, but more commonly, upon restart, Redis will be executing every command in the AOF in order. When handling large AOFs, Redis can take a very long time to start up.
+
+    - Solution :
+
+    To solve the growing AOF problem, we can use BGREWRITEAOF, which will rewrite the AOF to be as short as possible by removing redundant commands. BGREWRITEAOF works similarly to the snapshotting BGSAVE: performing a fork and subsequently rewriting the append-only log in the child. As such, all of the same limitations with snapshotting performance regarding fork time, memory use,
+    and so on still stand when using append-only files. But even worse, because AOFs can grow to be many times the size of a dump (if left uncontrolled), when the AOF is rewritten, the OS needs to delete the AOF, which can cause the system to hang for multiple seconds while it’s deleting an AOF of tens of gigabytes.
+
+    - Timing rewriting append-only file :
+
+    With snapshots, we could use the save configuration option to enable the automatic writing of snapshots using BGSAVE. Using AOFs, there are two configuration options that enable automatic BGREWRITEAOF execution: auto-aof-rewrite-percentage and auto-aof-rewrite-min-size. Using the example values of auto-aof-rewrite- percentage 100 and auto-aof-rewrite-min-size 64mb,
+    when AOF is enabled, Redis will initiate a BGREWRITEAOF when the AOF is at least 100% larger than it was when Redis last finished rewriting the AOF, and when the AOF is at least 64 megabytes in size. As a point of configuration, if our AOF is rewriting too often, we can increase the 100 that rep- resents 100% to something larger, though it will cause Redis to take
+    longer to start up if it has been a while since a rewrite happened.
+
+    - Saving append-only files to other servers :
+
+    Regardless of whether we choose append-only files or snapshots, having the data on disk is a great first step. But unless our data has been backed up somewhere else (preferably to multiple locations), we’re still leaving ourselves open to data loss. Whenever possible, I recommend backing up snapshots and newly rewritten append- only files to other servers.
+
+    - Replication help :
+
+    By using either append-only files or snapshots, we can keep our data between sys- tem reboots or crashes. As load increases, or requirements for data integrity become more stringent, we may need to look to replication to help us.
+
+
 
