@@ -717,4 +717,69 @@ ZSETs offer the ability to store a mapping of members to scores (similar to the 
     are received. This method of sending multiple commands at once and waiting for all of the replies is gener- ally referred to as pipelining, and has the ability to improve Redis’s performance when executing multiple commands by reducing the number of network
     round trips that a client needs to wait for.
 
+    - Use case Example - MarketPlace Specs :
+
+    In the last few months, Fake Game Company has seen major growth in their web- based RPG that’s played on YouTwitFace, a fictional social network. Because it pays attention to the needs and desires of its community,
+    it has determined that the players need the ability to buy and sell items in a marketplace. It’s our job to design and build a marketplace that can scale to the needs of the community.
+
+    5-1 Defining users and their inventory :
+
+    We’ll start by showing some structures that define our users and their inventory. User information is stored as a HASH, with keys and values that store user attributes like name, funds, and anything else. A user’s inventory will be a SET that holds unique
+    identifiers for each item, which can be seen in figure 4.2.
+
+![](./static/marketplace_model.png)
+
+    - Requirements :
+
+    Our requirements for the market are simple: a user can list an item for a given price, and when another user purchases the item, the seller receives the money. We’ll also say that the part of the market we’ll be worrying about only needs to be ordered by selling price.
+
+    - Market Model :
+
+    To include enough information to sell a given item in the market, we’ll concatenate the item ID for the item with the user ID of the seller and use that as a member of a market ZSET, with the score being the item’s selling price. By including all of this information together,
+    we greatly simplify our data struc- tures and what we need to look up, and get the benefit of being able to easily paginate through a presorted market. A small version of the marketplace is shown in figure 4.3.
+
+![](./static/market_model.png)
+
+    5-2 Listing items in the marketplace :
+
+    In the process of listing, we’ll use a Redis operation called WATCH, which we combine with MULTI and EXEC, and sometimes UNWATCH or DISCARD. When we’ve watched keys with WATCH, if at any time some other client replaces, updates, or deletes any keys that we’ve WATCHed before
+    we have performed the EXEC operation, our operations against Redis will fail with an error message when we try to EXEC (
+
+    ++ By using WATCH, MULTI/EXEC, and UNWATCH/DISCARD, we can ensure that the data that we’re working with doesn’t change while we’re doing some- thing important, which protects us from data corruption.
+
+    Let’s go about listing an item in the marketplace. To do so, we add the item to the market ZSET, while WATCHing the seller’s inventory to make sure that the item is still available to be sold. The function to list an item is shown here.
+
+![](./static/list_item.png)
+
+    After some initial setup, we’ll do what we described earlier. We’ll tell Redis that we want to watch the seller’s inventory, verify that the seller can still sell the item, and if so, add the item to the market and remove the item from their inventory.
+    If there’s an update or change to the inventory while we’re looking at it, we’ll receive an error and retry, as is shown by the while loop outside of our actual operation.
+
+    - Simulation of our function :
+
+    Let’s look at the sequence of operations that are performed when Frank (user 17) wants to sell ItemM for 97 e-dollars in figure 4.4.
+
+![](./static/simul_list_item.png)
+
+
+    - Use case Example - Purchasing items Specs :
+
+    To process the purchase of an item, we first WATCH the market and the user who’s buy- ing the item. We then fetch the buyer’s total funds and the price of the item, and ver- ify that the buyer has enough money. If they don’t have enough money, we cancel the transaction.
+    If they do have enough money, we perform the transfer of money between the accounts, move the item into the buyer’s inventory, and remove the item from the market. On WATCH error, we retry for up to 10 seconds in total. We can see the function which handles the purchase of an item in the following listing.
+
+![](./static/purchase_item.png)
+
+        pipe.watch("market:", buyer)  # A
+    --> To purchase an item, we need to spend more time preparing the data, and we need to watch both the market and the buyer’s information. We watch the market to ensure that the item can still be bought (or that we can notice that it has already been bought), and we watch the buyer’s information to verify that they have enough money.
+    --> When we’ve verified that the item is still there, and that the buyer has enough money, we go about actually moving the item into their inventory, as well as moving money from the buyer to the seller.
+
+    - Database Locks :
+
+    WHY DOESN’T REDIS IMPLEMENT TYPICAL LOCKING? When accessing data for writing (SELECT FOR UPDATE in SQL), relational databases will place a lock on rows that are accessed until a transaction is completed with COMMIT or ROLL- BACK. If any other client attempts to access data for writing on any of the same rows, that client will be blocked
+    until the first transaction is completed. This form of locking works well in practice (essentially all relational databases implement it), though it can result in long wait times for clients waiting to acquire locks on a number of rows if the lock holder is slow.
+    Because there’s potential for long wait times, and because the design of Redis minimizes wait time for clients (except in the case of blocking LIST pops), Redis doesn’t lock data during WATCH. Instead, Redis will notify clients if some- one else modified the data first, which is called optimistic locking (the actual locking that relational
+    databases perform could be viewed as pessimistic). Opti- mistic locking also works well in practice because clients are never waiting on the first holder of the lock; instead they retry if some other client was faster.
+
+![](./static/simul_purchase_item.png)
+![](./static/simul_purchase_item_continu.png)
+
 
