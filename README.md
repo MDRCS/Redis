@@ -783,3 +783,55 @@ ZSETs offer the ability to store a mapping of members to scores (similar to the 
 ![](./static/simul_purchase_item_continu.png)
 
 
+## + Non-transactional pipelines :
+
+    This section will show how to use a pipeline without a transaction to further improve performance.
+
+    For situations where we want to send more than one com- mand to Redis, the result of one command doesn’t
+    affect the input to another, and we don’t need them all to execute transactionally, passing False to the pipeline() method can further improve overall Redis performance.
+
+    - No transactional function :
+
+    If our Redis and web servers are connected over LAN with only one or two steps, we could expect that the round trip between the web server and Redis would be around 1–2 mil- liseconds. With three to five round trips between Redis and the web server, we could expect that it would take 3–10 milliseconds for update_token() to execute. At that speed,
+    we could only expect a single web server thread to be able to handle 100–333 requests per second. This is great, but we could do better. Let’s quickly create a non- transactional pipeline and make all of our requests over that pipeline. You can see the updated function in the next listing.
+
+![](./static/no_transactional_pipeline.png)
+
+    - Optimization :
+
+    By replacing our standard Redis connection with a pipelined connection, we can reduce our number of round trips by a factor of 3–5, and reduce the expected time to execute update_token_pipeline() to 1–2 milliseconds. At that speed, a single web server thread could handle 500–1000 requests per second if it only had to deal with updating item view information.
+    Theoretically, this is great, but what about in reality?
+
+    + Benchmarking :
+
+    Let’s test both of these functions by performing a simple benchmark. We’ll test the number of requests that can be processed per second against a copy of Redis that’s on the same machine, across a fast and low-latency network connection, and across a slow and higher latency connection. We’ll first start with the benchmark code that we’ll use to test
+    the performance of these connections. In our benchmark, we’ll call either update_token() or update_token_pipeline() repeatedly until we reach a prespecified timeout, and then calculate the number of requests we can service at a given time. The following listing shows the code that we’ll use to run our two update_token commands.
+
+![](./static/benchmarking.png)
+![](./static/performance_benchmark.png)
+
+    Looking at the table, note that for high-latency connections, we can multiply perfor- mance by a factor of five using pipelines over not using pipelines. Even with very low- latency remote connections, we’re able to improve performance by almost four times. For local connections, we actually run into the single-core performance limit of Python sending and receiving
+    short command sequences using the Redis protocol.
+
+    6- Performance considerations :
+
+    When coming from a relational database background, most users will be so happy with improving performance by a factor of 100 times or more by adding Redis, they won’t realize that they can make Redis perform even better. In the previous section, we intro- duced non-transactional pipelines as a way to minimize the number of round trips between our application and Redis.
+    But what if we’ve already built an application, and we know that it could perform better? How do we find ways to improve performance?
+    Improving performance in Redis requires having an understanding of what to expect in terms of performance for the types of commands that we’re sending to Redis. To get a better idea of what to expect from Redis, we’ll quickly run a bench- mark that’s included with Redis, redis-benchmark, as can be seen in listing 4.10. Feel free to explore redis-benchmark on your
+    own to discover the performance character- istics of your server and of Redis.
+
+![](./static/redis_benchmark.png)
+
+    $ redis-benchmark  -c 1 -q
+
+    ++ The output of redis-benchmark shows a group of commands that are typically used in Redis, as well as the number of commands of that type that can be run in a single sec- ond. A standard run of this benchmark without any options will try to push Redis to its limit using 50 clients, but it’s a lot easier to compare performance of a single bench- mark client against one copy of our own client, rather than many.
+
+    - The real thought-put of redis commands :
+    When looking at the output of redis-benchmark, we must be careful not to try to directly compare its output with how quickly our application performs. This is because redis-benchmark doesn’t actually process the result of the commands that it performs, which means that the results of some responses that require substantial parsing overhead aren’t taken into account. Generally, compared to redis-benchmark
+    running with a single client, we can expect the Python Redis client to perform at roughly 50–60% of what redis-benchmark will tell us for a single client and for non- pipelined commands, depending on the complexity of the command to call.
+
+    ++ This list of possible performance issues and solutions is short, but these issues amount to easily 95% of the performance-related problems that users report on a reg- ular basis (aside from using Redis data structures incorrectly). If we’re experiencing slowdowns that we’re having difficulty in diagnosing :
+
+![](./static/redis_performance_troubleshooting.png)
+
+
