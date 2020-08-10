@@ -560,5 +560,101 @@ ZSETs offer the ability to store a mapping of members to scores (similar to the 
 
     By using either append-only files or snapshots, we can keep our data between sys- tem reboots or crashes. As load increases, or requirements for data integrity become more stringent, we may need to look to replication to help us.
 
+    3- Replication :
+
+    Over their years of scaling platforms for higher loads, engineers and administrators have added replication to their bag of tricks to help systems scale. Replication is a method by which other servers receive a continuously updated copy of the data as it’s
+    being written, so that the replicas can service read queries. In the relational database world, it’s not uncommon for a single master database to send writes out to multiple slaves, with the slaves performing all of the read queries. Redis has adopted this
+    method of replication as a way of helping to scale, and this section will discuss config- uring replication in Redis, and how Redis operates during replication.
+
+    - limit of redis with one instance :
+
+    Though Redis may be fast, there are situations where one Redis server running isn’t fast enough. In particular, operations over SETs and ZSETs can involve dozens of SETs/ZSETs over tens of thousands or even millions of items. When we start getting millions of items involved, set operations can take seconds to finish,
+    instead of milli- seconds or microseconds. But even if single commands can complete in 10 millisec- onds, that still limits us to 100 commands/second from a single Redis instance.
+
+    ++ EXAMPLE PERFORMANCE FOR SUNIONSTORE :
+    As a point to consider for the performance to expect from Redis, on a 2.4 GHz Intel Core 2 Duo, Redis will take 7–8 milliseconds to perform a SUNIONSTORE of two 10,000-item SETs that produces a single 20,000 item SET.
+
+    - Master/Slave Replication :
+
+    For situations where we need to scale out read queries, or where we may need to write temporary data, we can set up additional slave Redis servers to keep copies of our dataset. After receiving an initial copy of the data from the master,
+    slaves are kept up to date in real time as clients write data to the master. With a master/slave setup, instead of connecting to the master for reading data, clients will connect to one of the slaves to read their data
+    (typically choosing them in a random fashion to try to balance the load).
+
+
+    3-1 Configuring Redis for replication :
+
+    As I mentioned in section 4.1.1, when a slave connects to the master, the master will start a BGSAVE operation.
+    To configure replication on the master side of things, we only need to ensure that the path and filename listed
+    under the dir and dbfilename configuration options shown in listing 4.1 are to a path and file that are writable by the Redis process.
+
+    Though a variety of options control behavior of the slave itself, only one option is really necessary to enable slaving: slaveof.
+    If we were to set slaveof host port in our configuration file, the Redis that’s started with that configuration will use
+    the provided host and port as the master Redis server it should connect to. If we have an already running system, we can
+    tell a Redis server to stop slaving, or even to slave to a new or different master. To connect to a new master, we can use the
+    SLAVEOF host port command, or if we want to stop updating data from the master, we can use SLAVEOF no one.
+
+    3-2 Redis replication startup process :
+
+    I briefly described what happens when a slave connects—that the master starts a snap- shot and sends that to the slave—but that’s the simple version.
+    Table below lists all of the operations that occur on both the master and slave when a slave connects to a master.
+
+![](./static/master_slave_startup.png)
+
+    - Memory Recommandation for Master redis instance :
+
+    With the method outlined in table 4.2, Redis manages to keep up with most loads dur- ing replication, except in cases where network bandwidth
+    between the master and slave instances isn’t fast enough, or when the master doesn’t have enough memory to fork and keep a backlog of write commands.
+    Though it isn’t necessary, it’s generally considered to be a good practice to have Redis masters only use about 50–65% of the memory in our system,
+    leaving approximately 30–45% for spare memory during BGSAVE and command backlogs.
+
+    - Configure Slave redis instance :
+
+    On the slave side of things, configuration is also simple. To configure the slave for master/slave replication, we can either set the configuration
+    option SLAVEOF host port, or we can configure Redis during runtime with the SLAVEOF command. If we use the configuration option, Redis will initially
+    load whatever snapshot/AOF is currently available (if any), and then connect to the master to start the replication process out- lined in table 4.2.
+    If we run the SLAVEOF command, Redis will immediately try to con- nect to the master, and upon success, will start the replication process outlined in table 4.2.
+
+    NB : DURING SYNC, THE SLAVE FLUSHES ALL OF ITS DATA Just to make sure that we’re all on the same page (some users forget this the first time they try using slaves):
+         when a slave initially connects to a master, any data that had been in memory will be lost, to be replaced by the data coming from the master.
+
+![](./static/many_slaves.png)
+
+    3-3-1 Master/slave chains :
+
+    there’s nothing partic- ularly special about being a master or a slave in Redis, slaves can have their own slaves, resulting in master/slave chaining.
+
+    - Problem with One Master and to-many slaves Replication :
+
+    When read load significantly outweighs write load, and when the number of reads pushes well beyond what a single Redis server can handle,
+    it’s common to keep adding slaves to help deal with the load. As load continues to increase, we can run into situa- tions where the single
+    master can’t write to all of its slaves fast enough, or is over- loaded with slaves reconnecting and resyncing. To alleviate such issues,
+    we may want to set up a layer of intermediate Redis master/slave nodes that can help with replica- tion duties similar to figure 4.1.
+
+### - Intermediate replication layer helper :
+![](./static/master_slave_chaining.png)
+
+    - Combining Append-only (option every sec) and Master/Slave chains replication :
+
+    Back in section 4.1.2, we talked about using append-only files with syncing to limit
+    the opportunities for us to lose data. We could prevent data loss almost entirely
+    (except for system or hard drive crashes) by syncing every write to disk,
+    but then we end up limiting performance severely. If we tell Redis to sync every second,
+    we’re able to get the performance we need, but we could lose up to a second of writes
+    if bad things happen. But by combining replication and append-only files, we can ensure that data gets to disk on multiple machines.
+
+    - Configure Replication Optimized :
+
+    In order to ensure that data gets to disk on multiple machines, we must obviously set up a master with slaves.
+    By configuring our slaves (and optionally our master) with appendonly yes and appendfsync everysec, we now have a
+    group of machines that will sync to disk every second. But that’s only the first part: we must wait for the write
+    to reach the slave(s) and check to make sure that the data reached disk before we can continue.
+
+    3-3-2 Verifying disk writes :
+
+    Verifying that the data we wrote to the master made it to the slave is easy: we merely need to write a unique dummy value after our important data,
+    and then check for it on the slave. But verifying that the data made it to disk is more difficult. If we wait at least one second, we know that our
+    data made it to disk. But if we’re careful, we may be able to wait less time by checking the output of INFO for the value of aof_pending_bio_fsync,
+    which will be 0 if all data that the server knows about has been written to disk. To automate this check, we can use the function provided in the next
+    listing, which we’d call after writing our data to the master by passing both the master and slave connections.
 
 
