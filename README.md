@@ -657,4 +657,64 @@ ZSETs offer the ability to store a mapping of members to scores (similar to the 
     which will be 0 if all data that the server knows about has been written to disk. To automate this check, we can use the function provided in the next
     listing, which we’d call after writing our data to the master by passing both the master and slave connections.
 
+![](./static/check_data_persisted_ondisk.png)
+
+    - redis info() command :
+
+    OTHER INFORMATION FROM THE INFO COMMAND The INFO command can offer a wide range of information about the current status of a Redis server—memory used,
+    the number of connected clients, the number of keys in each database, the number of commands executed since the last snapshot, and more. Gener- ally speaking,
+    INFO is a good source of information about the general state of our Redis servers, and many resources online can explain more.
+
+    By combining replication and append-only files, we can configure Redis to be resil- ient against system failures.
+
+    4- Handling system failures :
+
+    4-1 Verifying snapshots and append-only files :
+
+    When confronted with system failures, we have tools to help us recover when either snapshotting or append-only file logging had been enabled.
+
+    These commands are redis-check-aof and redis-check-dump. If we run either com- mand without arguments, we’ll see the basic help that’s provided:
+    $ redis-check-aof
+    Usage: redis-check-aof [--fix] <file.aof>
+    $ redis-check-dump
+    Usage: redis-check-dump <dump.rdb>
+    $
+
+    + Backup an append-only file :
+
+    If we provide --fix as an argument to redis-check-aof, the command will fix the file. Its method to fix an append-only file is simple: it scans through
+    the provided AOF, looking for an incomplete or incorrect command. Upon finding the first bad com- mand, it trims the file to just before that command
+    would’ve been executed. For most situations, this will discard the last partial write command.
+
+    + Backup a Snapshot:
+
+    Unfortunately, there’s no currently supported method of repairing a corrupted snapshot. Though there’s the potential to discover where the first error had occurred,
+    because the snapshot itself is compressed, an error partway through the dump has the potential to make the remaining parts of the snapshot unreadable.
+    It’s for these rea- sons that I’d generally recommend keeping multiple backups of important snapshots, and calculating the SHA1 or SHA256 hashes to verify content during restoration.
+    (Modern Linux and Unix platforms will have available sha1sum and sha256sum com- mand-line applications for generating and verifying these hashes.)
+
+    4-2 Replacing a failed master :
+
+    When we’re running a group of Redis servers with replication and persistence, there may come a time when some part of our infrastructure stops working for one reason or another. Maybe we get a bad hard drive,
+    maybe bad memory, or maybe the power just went out. Regardless of what causes the system to fail, we’ll eventually need to replace a Redis server. Let’s look at an example scenario involving a master, a slave, and needing to replace the master.
+
+    + Scenario 1 - Master redis server Losing connectivity :
+
+    Machine A is running a copy of Redis that’s acting as the master, and machine B is running a copy of Redis that’s acting as the slave. Unfortunately, machine A has just lost network connectivity for some reason that we haven’t yet been able to diagnose.
+    But we have machine C with Redis installed that we’d like to use as the new master.
+    Our plan is simple: We’ll tell machine B to produce a fresh snapshot with SAVE. We’ll then copy that snapshot over to machine C. After the snapshot has been copied into the proper path, we’ll start Redis on machine C. Finally, we’ll tell machine B
+    to become a slave of machine C.3 Some example commands to make this possible on this hypothetical set of systems are shown in the following listing.
+
+![](./static/replacing_failed_master.png)
+
+    5- Redis transactions :
+
+    Part of keeping our data correct is understanding that when other clients are working on the same data, if we aren’t careful, we may end up with data corruption. In this sec- tion, we’ll talk about using Redis transactions to prevent data corruption
+    and, in some cases, to improve performance.
+
+    DELAYED EXECUTION WITH MULTI/EXEC CAN IMPROVE PERFORMANCE Because of Redis’s delaying execution of commands until EXEC is called when using MULTI/ EXEC, many clients (including the Python client that we’re using) will hold off on even sending commands
+    until all of them are known. When all of the com- mands are known, the client will send MULTI, followed by the series of com- mands to be executed, and EXEC, all at the same time. The client will then wait until all of the replies from all of the commands
+    are received. This method of sending multiple commands at once and waiting for all of the replies is gener- ally referred to as pipelining, and has the ability to improve Redis’s performance when executing multiple commands by reducing the number of network
+    round trips that a client needs to wait for.
+
 
