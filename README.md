@@ -834,4 +834,82 @@ ZSETs offer the ability to store a mapping of members to scores (similar to the 
 
 ![](./static/redis_performance_troubleshooting.png)
 
+### + Using Redis for application support :
+
+    - the components we build in this chapter aren’t the applications themselves, but will help to support those appli- cations. This support comes by way of recording information about the applications
+      and application visitors, and a method of configuring applications.
+
+    1- Logging to Redis :
+    As we build applications and services, being able to discover information about the running system becomes increasingly important. Being able to dig into that informa- tion to diagnose problems, discover problems before they become severe, or even just to discover information about users—these all necessitate logging.
+
+    - Logging methods plain-file or redis :
+
+    In the world of Linux and Unix, there are two common logging methods. The first is logging to a file, where over time we write individual log lines to a file, and every once in a while, we write to a new file. Many thousands of pieces of software have been written do this (including Redis itself). But this method
+    can run into issues because we have many different services writing to a variety of log files, each with a different way of rolling them over, and no common way of easily taking all of the log files and doing something useful with them.
+
+    + Syslog a tool to manage logging :
+      Syslog accepts log mes- sages from any program that sends it a message and routes those messages to various on-disk log files, handling rotation and deletion of old logs. With configuration, it can even forward messages to other servers for further processing. As a service, it’s far more convenient than logging to files directly, because all of the special log file rota- tion and deletion is already handled for us.
+
+    + Recent logs :
+
+    When building a system, knowing what’s important to record can be difficult. Do you record every time someone logs in? What about when they log out? Do you log every time someone changes their account information? Or do you only log errors and exceptions? I can’t answer those questions for you directly, but I can offer a method of
+    keeping a recent list of log messages in Redis, which will let you get a snapshot view of your logs at any time.
+
+    To keep a recent list of logs, we’ll LPUSH log messages to a LIST and then trim that LIST to a fixed size. Later, if we want to read the log messages, we can perform a sim- ple LRANGE to fetch the messages. We’ll take a few extra steps to support different named log message queues and to support the typical log severity levels, but you can remove either of those in your own code if you need to. The code for writing recent logs to Redis is shown in the next listing.
+
+![](./static/recent_logs.png)
+
+    + Common logs :
+
+    - How often a message appears on logs ?
+    A simple and useful way of knowing how often a message appears is by storing the message as a member of a ZSET, with the score being how often the message appears. To make sure that we only see recent common messages, we’ll rotate our record of common messages every hour. So that we don’t lose everything, we’ll keep the previous hour’s worth of common messages. Our code for keeping track of and rotating com- mon log messages is shown next.
+
+![](./static/common_logs.png)
+
+    + Counters and statistics :
+
+    As you saw way back in chapter 2 when I introduced the concept of counting individ- ual page visits, having basic hit count information can (for example) change the way we choose our caches. But our example from chapter 2 was very simple, and reality is rarely that simple, especially when it involves a real website.
+    The fact that our site received 10,000 hits in the last 5 minutes, or that the database handled 200 writes and 600 reads in the last 5 seconds, is useful information to know. If we add the ability to see that information over time, we can notice sudden or grad- ual increases in traffic, predict when server upgrades are necessary, and ultimately save ourselves from downtime due to an overloaded system.
+
+    - Storing counters in Redis :
+
+    As we monitor our application, being able to gather information over time becomes ever more important. Code changes (that can affect how quickly our site responds, and subsequently how many pages we serve), new advertising campaigns, or new users to our system can all radically change the number of pages that are loaded on a site. Subsequently, any number of other performance metrics may change. But if we aren’t recording any metrics, then it’s impossible
+    to know how they’re changing, or whether we’re doing better or worse.
+
+    In an attempt to start gathering metrics to watch and analyze, we’ll build a tool to keep named counters over time (counters with names like site hits, sales, or database que- ries can be crucial). Each of these counters will store the most recent 120 samples at a variety of time precisions (like 1 second, 5 seconds, 1 minute, and so on). Both the num- ber of samples and the selection of precisions to record can be customized as necessary.
+    The first step for keeping counters is actually storing the counters themselves.
+
+    UPDATING A COUNTER
+    In order to update counters, we’ll need to store the actual counter information. For each counter and precision, like site hits and 5 seconds, we’ll keep a HASH that stores infor- mation about the number of site hits that have occurred in each 5-second time slice. The keys in the hash will be the start of the time slice, and the value will be the number of hits. Figure 5.1 shows a selection of data from a hit counter with 5-second time slices.
+
+![](./static/counter_hits_5seconds.png)
+![](./static/known_counters.png)
+![](./static/counter_funcs.png)
+
+    - CLEANING OUT OLD COUNTERS :
+    Now we have all of our counters written to Redis and we can fetch our counters with ease. But as we update our counters, at some point we’re going to run out of memory if we don’t perform any cleanup. Because we were thinking ahead, we wrote to our known ZSET the listing of known counters. To clean out the counters, we need to iter- ate over that listing and clean up old entries.
+
+    ++ WHY NOT USE EXPIRE? One limitation of the EXPIRE command is that it only applies to whole keys; we can’t expire parts of keys. And because we chose to structure our data so that counter X of precision Y is in a single key for all time, we have to clean out the counters periodically. If you feel ambitious, you may want to try restructuring the counters to change the data layout to use standard Redis expiration instead.
+
+    As we process and clean up old counters, a few things are important to pay attention to. The following list shows a few of the more important items that we need to be aware of as we clean out old counters:
+    ■ New counters can be added at any time.
+    ■ Multiple cleanups may be occurring at the same time.
+    ■ Trying to clean up daily counters every minute is a waste of effort.
+    ■ If a counter has no more data, we shouldn’t try to clean it up any more.
+
+    + Storing statistics in Redis :
+
+    We’ll build a method to store statistics that have a similar scope to our log_common() function from section 5.1.2 (the current hour and the last hour). We’ll collect enough information to keep track of the minimum, maximum, average value, standard deviation, sample count, and the sum of values that we’re recording. We record so much information because we can just about guarantee that if we aren’t recording it, we’ll probably need it.
+
+![](./static/stats.png)
+
+    + Create a Context manager that will help us record access time for everypage to do our stats :
+
+![](./static/context_manager.png)
+
+    +++ After seeing the example, even if you don’t yet understand how to create a context manager, you should at least know how to use one. In this example, we used the access time context manager to calculate the total time to generate a web page. This context manager could also be used to record the time it takes to make a database query or the amount of time it takes to render a template. As an exercise, can you think of other types of
+    context managers that could record statistics that would be useful? Or can you add reporting of access times that are more than two standard deviations above average to the recent_log()?
+
+    - Graphite (http://graphite.wikidot.com/) is one of the tools that could help you gather statistics for your system.
+
 
