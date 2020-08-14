@@ -912,4 +912,185 @@ ZSETs offer the ability to store a mapping of members to scores (similar to the 
 
     - Graphite (http://graphite.wikidot.com/) is one of the tools that could help you gather statistics for your system.
 
+    + IP-to-city and -country lookup :
+
+    we’ll build a set of functions that we can use to parse an IP-to-location database, and we’ll write a function to look up IP addresses to determine the visitor’s city, region (state), and country.
+
+    + Specs - Fake Game Company :
+
+    As visitors to Fake Game Company’s game have multiplied, players have been com- ing from all over the world to visit and play. Though tools like Google Analytics have helped Fake Game Company to understand which major countries their users are from, they want to know cities and states to better understand their users. It’s our job to use one of the IP address-to-city databases and combine it with Redis to discover the locations of players.
+
+    - Loading the location tables :
+
+    For development data, I’ve downloaded a free IP-to-city database available from http: //dev.maxmind.com/geoip/geolite.
+    + This database contains two important files: Geo-LiteCity-Blocks.csv, which contains information about ranges of IP addresses and city IDs for those ranges,
+    + and GeoLiteCity-Location.csv, which contains a mapping of city IDs to the city name, the name of the region/state/province, the name of the country, and some other information that we won’t use.
+
+    - Work to do :
+
+    We’ll first construct the lookup table that allows us to take an IP address and con- vert it to a city ID.
+    We’ll then construct a second lookup table that allows us to take the city ID and convert it to actual city information (city information will also include region and country information).
+
+    - Solution :
+
+    The table that allows us to find an IP address and turn it into a city ID will be con- structed from a single ZSET, which has a special city ID as the member, and an integer value of the IP address as the score. To allow us to map from IP address to city ID, we convert dotted-quad format IP addresses to an integer score by taking each octet as a byte in an unsigned 32-bit integer, with the first octet being the highest bits. Code to perform this operation can be seen here.
+
+    + Service discovery and configuration :
+
+    As your use of Redis and other services grows over time, you’ll eventually come to a sit- uation where keeping configuration information can get out of hand. It’s not a big deal when you have one Redis server, one database server, and one web server. But when you have a Redis master with a few slaves, or different Redis servers for different applications, or even master
+    and slave database servers, keeping all of that configura- tion can be a pain.
+
+    - Problem Solved when storing configuration files on redis remote servers :
+
+    Typically, configuration information for connecting to different services and serv- ers is contained in configuration files that are stored on disk. And in situations where a machine breaks down, a network connection goes down, or something else causes us to need to connect to a different server, we’ll usually need to update a number of con- figuration files in one of a number of locations. In this section, we’ll talk about how we can move much of our configuration out of
+    files and into Redis, which will let applica- tions almost configure themselves.
+
+    1- Using Redis to store configuration information - specs :
+
+    To see how generally difficult configuration management can be, we only need to look at the simplest of configurations: a flag to tell our web servers whether we’re under maintenance. If so, we shouldn’t make requests against the database, and should instead return a simple “Sorry, we’re under maintenance; try again later” mes- sage to visitors. If the site isn’t under maintenance, all of the normal web-serving behavior should happen.
+
+    += In a typical situation, updating that single flag can force us to push updated config- uration files to all of our web servers, and may force us to reload configurations on all of our servers, if not force us to restart our application servers themselves.
+
+    INFOS +++ To implement this simple behavior, we’ll assume that we’ve built a middleware layer or plugin like we used for caching in chapter 2 that will return our maintenance page if a simple is_under_maintenance() function returns True, or will handle the request like normal if it returns False. Our actual function will check for a key called is-under-maintenance. If the key has any value stored there, we’ll return True; other- wise, we’ll return False.
+              To help minimize the load to Redis under heavy web server load (because people love to hit Refresh when they get maintenance pages), we’ll only update our information once per second. Our function can be seen in this listing.
+
+    Recommandation -> To help with the ease of transitioning to more servers, I recommend running one Redis server for every separate part of your application—one for logging, one for sta- tistics, one for caching, one for cookies, and so forth.
+                      Note that you can run multiple Redis servers on a single machine; they just need to run on different ports.
+
+![](./static/set_config.png)
+![](./static/get_config.png)
+
+    With this set_config() function, we can set any JSON-encodable configuration that we may want.
+
+    + Automatic Redis connection management :
+
+    Our decorator will take a named configuration as an argument, which will generate a wrapper that, when called on the actual function,
+    will wrap the function such that later calls will automatically connect to the appropriate Redis server, and that connec- tion will be passed to the wrapped function with all of the other arguments that were later provided. The next listing has the source for our redis_connection() function.
+
+![](./static/redis_connection.png)
+
+    - I know that this group of nested functions can be confusing at first, but it really isn’t that bad. We have a function, redis_connection(), that takes the named application component and returns a wrapper function. That wrapper function is then called with the function we want to
+      pass a connection to (the wrapped function), which then returns the function caller. This caller handles all of the work of getting configuration information, connecting to Redis, and calling our wrapped function. Though it’s a mouthful to describe, actually using it is convenient,
+      as you can see by applying it in the next listing to our log_recent() function from section 5.1.1.
+
+![](./static/apply_decorator.png)
+
+    +++ We no longer need to worry about passing the log server connection when calling log_recent().
+
+
+### + Application components in Redis :
+
+    We’ll begin by building autocomplete functions to quickly find users in short and long lists of items. We’ll then take some time to carefully build two different types of locks to reduce data contention, improve performance, prevent data cor- ruption, and reduce wasted work. We’ll construct a delayed task queue,
+    only to aug- ment it later to allow for executing a task at a specific time with the use of the lock we just created. Building on the task queues, we’ll build two different messaging sys- tems to offer point-to-point and broadcast messaging services. We’ll then reuse our earlier IP-address-to-city/-country lookup from chapter 5,
+    and apply it to billions of log entries that are stored and distributed via Redis.
+
+    1- Autocomplete :
+
+    In the web world, autocomplete is a method that allows us to quickly look up things that we want to find without searching.
+    it works by taking the letters that we’re typing and finding all words that start with those letters.
+    Some autocomplete tools will even let us type the beginning of a phrase and finish the phrase for us. As an example, autocomplete in
+    Google’s search shows us that Betty White’s SNL appear- ance is still popular, even years later (which is no surprise—she’s a firecracker).
+    It shows us the URLs we’ve recently visited and want to revisit when we type in the address bar, and it helps us remember login names.
+    All of these functions and more are built to help us access information faster. Some of them, like Google’s search box,
+    are backed by many terabytes of remote information. Others, like our browser history and login boxes, are backed by much smaller local databases. But they all get us what we want with less work.
+
+
+    - What kind of autocomplete algorithms that we are going to build :
+
+    We’ll build two different types of autocomplete in this section. The first uses lists to remember the most recent 100 contacts that a user has communicated with, trying to minimize memory use.
+    Our second autocomplete offers better performance and scal- ability for larger lists, but uses more memory per list. They differ in their structure, the methods used, and the time it takes for
+    the operations to complete. Let’s first start with an autocomplete for recent contacts.
+
+    1.1 Autocomplete for recent contacts - Specs :
+
+    The purpose of this autocomplete is to keep a list of the most recent users that each player has been in contact with. To increase the social aspect of the game and to allow people to quickly
+    find and remember good players, Fake Game Company is looking to create a contact list for their client to remember the most recent 100 people that each user has chatted with. On the client side,
+    when someone is trying to start a chat, they can start typing the name of the person they want to chat with, and autocomplete will show the list of users whose screen names start with the characters
+    they’ve typed. Fig- ure 6.1 shows an example of this kind of autocompletion.
+
+![](./static/auto_complete_recent.png)
+
+    Because each of the millions of users on the
+    server will have their own list of their most
+    recent 100 contacts, we need to try to minimize
+    memory use, while still offering the ability to
+    quickly add and remove users from the list.
+    Because Redis LISTs keep the order of items
+    consistent, and because LISTs use minimal
+    memory compared to some other structures,
+    we’ll use them to store our autocomplete lists.
+
+    ++ Unfortunately, LISTs don’t offer enough functionality to actually perform the autocom- pletion inside Redis, so we’ll perform the actual autocomplete outside of Redis, but inside of Python.
+       This lets us use Redis to store and update these lists using a minimal amount of memory, leaving the relatively easy filtering to Python.
+
+    - Operations to be executed on Redis :
+
+    Generally, three operations need to be performed against Redis in order to deal with the recent contacts autocomplete lists. The first operation is to add or update a contact to make them the most
+    recent user contacted. To perform this operation, we need to perform these steps:
+
+    1 Remove the contact from the list if it exists.
+    2 Add the contact to the beginning of the list.
+    3 Trim the list if it now has more than 100 items.
+
+    We can perform these operations with LREM, LPUSH, and LTRIM, in that order. To make sure that we don’t have any race conditions, we’ll use a MULTI/EXEC transaction around our commands
+    The complete function is shown in this next listing.
+
+![](./static/update_add_op_contact.png)
+
+    As I mentioned, we removed the user from the LIST (if they were present), pushed the user onto the left side of the LIST; then we trimmed the LIST to ensure that it didn’t grow beyond our limit.
+    The second operation that we’ll perform is to remove a contact if the user doesn’t want to be able to find them anymore. This is a quick LREM call, which can be seen as follows:
+    def remove_contact(conn, user, contact):
+        conn.lrem('recent:' + user, contact)
+
+![](./static/auto_complete_func.png)
+
+    Again, we fetch the entire autocomplete LIST, filter it by whether the name starts with the necessary prefix, and return the results. This particular operation is simple enough that we could
+    even push it off to the client if we find that our server is spend- ing too much time computing it, only requiring a refetch on update.
+
+
+    NB: This autocomplete will work fine for our specific example. It won’t work as well if the lists grow significantly larger, because to remove an item takes time proportional to the length of the list.
+        But because we were concerned about space, and have explicitly lim- ited our lists to 100 users, it’ll be fast enough. If you find yourself in need of much larger most- or least-recently-used lists,
+        you can use ZSETs with timestamps instead.
+
+    + Address book autocomplete :
+
+    In the previous example, Redis was used primarily to keep track of the contact list, not to actually perform the autocomplete. This is okay for short lists, but for longer lists, fetching thousands or
+    millions of items to find just a handful would be a waste. Instead, for autocomplete lists with many items, we must find matches inside Redis.
+
+    - Specs :
+
+    Going back to Fake Game Company, the recent contacts chat autocomplete is one of the most-used social features of our game. Our number-two feature, in-game mail- ing, has been gaining momentum. To keep the momentum going,
+    we’ll add an auto- complete for mailing. But in our game, we only allow users to send mail to other users that are in the same in-game social group as they are, which we call a guild. This helps to prevent abusive and unsolicited messages between users.
+
+    ++ Guilds can grow to thousands of members, so we can’t use our old LIST-based auto- complete method. But because we only need one autocomplete list per guild, we can use more space per member. To minimize the amount of data to be transferred to cli- ents who are autocompleting,
+    we’ll perform the autocomplete prefix calculation inside Redis using ZSETs.
+
+    - Guild is a Game group.
+    - The user inside each game group have the permission to send mails for each other.
+
+    * This helps to prevent abusive and unsolicited messages between users.
+
+    ++ When all scores are zero, all members are sorted based on the binary ordering of the strings. In order to actually perform the autocomplete, we’ll insert lowercased contact names. Conveniently enough, we’ve only ever allowed users to have letters in their names, so we don’t need to worry about numbers or symbols.
+
+    + Elaborating solution :
+
+    --= What do we do? Let’s start by thinking of names as a sorted sequence of strings like abc, abca, abcb, ... abd. If we’re looking for words with a prefix of abc, we’re really looking for strings that are after abbz... and before abd.
+    --+  If we knew the rank of the first item that is before abbz... and the last item after abd, we could perform a ZRANGE call to fetch items between them. But, because we don’t know whether either of those items are there, we’re stuck.
+         To become unstuck, all we really need to do is to insert items that we know are after abbz... and before abd, find their ranks, make our ZRANGE call, and then remove our start and end members.
+    ++- The good news is that finding an item that’s before abd but still after all valid names with a prefix of abc is easy: we concatenate a { (left curly brace) character onto the end of our prefix, giving us abc{.
+        Why {? Because it’s the next character in ASCII after z. To find the start of our range for abc, we could also concatenate { to abb, get- ting abb{, but what if our prefix was aba instead of abc? How do we find a
+        character before a? We take a hint from our use of the curly brace, and note that the character that precedes a in ASCII is ` (back quote). So if our prefix is aba, our start member will be ab`, and our end member will be aba{.
+
+![](./static/find_prefix.png)
+
+    After we have the range of values that we’re looking for, we need to insert our ending points into the ZSET, find the rank of those newly added items, pull some number of items between them (we’ll fetch at most 10 to avoid overwhelming the user), and then remove our added items.
+    To ensure that we’re not adding and removing the same items, as would be the case if two members of the same guild were trying to message the same user, we’ll also concatenate a 128-bit randomly generated UUID to our start and end members.
+
+![](./static/autocomplete_prefix_func.png)
+![](./static/autocomplete_prefix_func_suite.png)
+
+![](./static/guild_ops.png)
+
+### + Distributed locking - replacing WATCH with locks.
+
 
