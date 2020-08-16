@@ -1093,4 +1093,57 @@ ZSETs offer the ability to store a mapping of members to scores (similar to the 
 
 ### + Distributed locking - replacing WATCH with locks.
 
+    Generally, when you “lock” data, you first acquire the lock, giving you exclusive access to the data. You then perform your operations. Finally, you release the lock to others.
+    This sequence of acquire, operate, release is pretty well known in the context of shared-memory data structures being accessed by threads. In the context of Redis, we’ve been using
+    WATCH as a replacement for a lock, and we call it optimistic locking, because rather than actually preventing others from modifying the data, we’re noti- fied if someone else changes the data before we do it ourselves.
+
+    ++ With distributed locking, we have the same sort of acquire, operate, release opera- tions, but instead of having a lock that’s only known by threads within the same pro- cess, or processes on the same machine,
+       we use a lock that different Redis clients on different machines can acquire and release. When and whether to use locks or WATCH will depend on a given application; some applications don’t need locks to operate cor- rectly,
+       some only require locks for parts, and some require locks at every step.
+
+    One reason why we spend so much time building locks with Redis instead of using operating system–level locks, language-level locks, and so forth, is a matter of scope. Clients want to have exclusive access to data stored on Redis,
+    so clients need to have access to a lock defined in a scope that all clients can see—Redis. Redis does have a basic sort of lock already available as part of the command set (SETNX), which we use, but it’s not full-featured and doesn’t
+    offer advanced functionality that users would expect of a distributed lock.
+
+    - Building a lock in Redis :
+
+    The first part of making sure that no other code can run is to acquire the lock. The natural building block to use for acquiring a lock is the SETNX command, which will only set a value if the key doesn’t already exist.
+    We’ll set the value to be a unique iden- tifier to ensure that no other process can get the lock, and the unique identifier we’ll use is a 128-bit randomly generated UUID.
+
+    ++ If we fail to acquire the lock initially, we’ll retry until we acquire the lock, or until a specified timeout has passed, whichever comes first, as shown here.
+
+![](./static/acquire_lock_redis.png)
+
+    As described, we’ll attempt to acquire the lock by using SETNX to set the value of the lock’s key only if it doesn’t already exist. On failure, we’ll continue to attempt this until we’ve run out of time (which defaults to 10 seconds).
+
+    - Redis SETNX : Set key to hold string value if key does not exist. In that case, it is equal to SET. When key already holds a value, no operation is performed. SETNX is short for "SET if Not eXists".
+
+    - Simulation :
+
+    Now that we have the lock, we can perform our buying or selling without WATCH errors getting in our way. We’ll acquire the lock and, just like before, check the price of the item, make sure that the buyer has enough money, and if so,
+    transfer the money and item. When completed, we release the lock. The code for this can be seen next.
+
+![](./static/purchase_item_with_lock.png)
+
+    """ Looking through the code listing, it almost seems like we’re locking the operation. But don’t be fooled—we’re locking the market data, and the lock must exist while we’re operating on the data, which is why it surrounds the code performing the operation. """
+
+    - Release a Lock :
+
+    To release the lock, we need to WATCH the lock key, and then check to make sure that the value is still the same as what we set it to before we delete it. This also prevents us from releasing a lock multiple times. The release_lock() function is shown next.
+
+![](./static/release_lock.png)
+
+    ++ except in very rare situations, we don’t need to repeatedly loop. But the next version of the acquire lock function that supports timeouts, if accidentally mixed with earlier versions (also unlikely, but anything is possible with code), could cause the
+       release lock transaction to fail and could leave the lock in the acquired state for longer than necessary. So, just to be extra careful, and to guarantee correctness in as many situations as possible, we’ll err on the side of caution.
+
+    + locks with timeouts :
+
+    - Problem : As mentioned before, our lock doesn’t handle cases where a lock holder crashes with- out releasing the lock, or when a lock holder fails and holds the lock forever. To han- dle the crash/failure cases, we add a timeout to the lock.
+
+    In order to give our lock a timeout, we’ll use EXPIRE to have Redis time it out auto- matically. The natural place to put the EXPIRE is immediately after the lock is acquired, and we’ll do that. But if our client happens to crash (and the worst place for it to crash for us is between SETNX and EXPIRE), we still want the lock to eventually time out. To handle that situation, any time a client fails to get the lock, the client will check the expiration on the lock, and if it’s not set, set it. Because clients are going to be checking and setting timeouts if they fail to get a lock, the lock will always have a timeout, and will eventually expire, letting other clients get a timed-out lock.
+    What if multiple clients set expiration times simultaneously? They’ll run at essen- tially the same time, so expiration will be set for the same time.
+    Adding expiration to our earlier acquire_lock() function gets us the updated acquire_lock_with_timeout() function shown here.
+
+![](./static/acquire_lock_timeout.png)
+
 
