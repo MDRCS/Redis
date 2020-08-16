@@ -1146,4 +1146,16 @@ ZSETs offer the ability to store a mapping of members to scores (similar to the 
 
 ![](./static/acquire_lock_timeout.png)
 
+    + Counting semaphores :
+
+    counting semaphore. It isn’t used in as many places as a regular lock, but when we need to give multiple clients access to the same information at the same time, it’s the per- fect tool for the job.
+    A counting semaphore is a type of lock that allows you to limit the number of processes that can concurrently access a resource to some fixed number. You can think of the lock that we just created
+    as being a counting semaphore with a limit of 1. Generally, counting semaphores are used to limit the amount of resources that can be used at one time.
+
+    - Difference between Mutex, Locks and Semaphores :
+
+    + A lock allows only one thread to enter the part that's locked and the lock is not shared with any other processes.
+    + A mutex is the same as a lock but it can be system wide (shared by multiple processes).
+    + A semaphore does the same as a mutex but allows x number of threads to enter, this can be used for example to limit the number of cpu, io or ram intensive tasks running at the same time.
+
 
