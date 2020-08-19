@@ -432,14 +432,14 @@ def worker_watch_queues(conn, queues, callbacks):   #A
 #END
 
 # <start id="_1314_14473_9094"/>
-def execute_later(conn, queue, name, args, delay=0):
-    identifier = str(uuid.uuid4())                          #A
-    item = json.dumps([identifier, queue, name, args])      #B
-    if delay > 0:
-        conn.zadd('delayed:', {item: time.time() + delay})  #C
-    else:
-        conn.rpush('queue:' + queue, item)                  #D
-    return identifier                                       #E
+# def execute_later(conn, queue, name, args, delay=0):
+#     identifier = str(uuid.uuid4())                          #A
+#     item = json.dumps([identifier, queue, name, args])      #B
+#     if delay > 0:
+#         conn.zadd('delayed:', {item: time.time() + delay})  #C
+#     else:
+#         conn.rpush('queue:' + queue, item)                  #D
+#     return identifier                                       #E
 # <end id="_1314_14473_9094"/>
 #A Generate a unique identifier
 #B Prepare the item for the queue
@@ -449,24 +449,24 @@ def execute_later(conn, queue, name, args, delay=0):
 #END
 
 # <start id="_1314_14473_9099"/>
-def poll_queue(conn):
-    while not QUIT:
-        item = conn.zrange('delayed:', 0, 0, withscores=True)   #A
-        if not item or item[0][1] > time.time():                #B
-            time.sleep(.01)                                     #B
-            continue                                            #B
-
-        item = item[0][0]                                       #C
-        identifier, queue, function, args = json.loads(item)    #C
-
-        locked = acquire_lock(conn, identifier)                 #D
-        if not locked:                                          #E
-            continue                                            #E
-
-        if conn.zrem('delayed:', item):                         #F
-            conn.rpush('queue:' + queue, item)                  #F
-
-        release_lock(conn, identifier, locked)                  #G
+# def poll_queue(conn):
+#     while not QUIT:
+#         item = conn.zrange('delayed:', 0, 0, withscores=True)   #A
+#         if not item or item[0][1] > time.time():                #B
+#             time.sleep(.01)                                     #B
+#             continue                                            #B
+#
+#         item = item[0][0]                                       #C
+#         identifier, queue, function, args = json.loads(item)    #C
+#
+#         locked = acquire_lock(conn, identifier)                 #D
+#         if not locked:                                          #E
+#             continue                                            #E
+#
+#         if conn.zrem('delayed:', item):                         #F
+#             conn.rpush('queue:' + queue, item)                  #F
+#
+#         release_lock(conn, identifier, locked)                  #G
 # <end id="_1314_14473_9099"/>
 #A Get the first item in the queue
 #B No item or the item is still to be execued in the future

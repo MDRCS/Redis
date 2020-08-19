@@ -1159,3 +1159,79 @@ ZSETs offer the ability to store a mapping of members to scores (similar to the 
     + A semaphore does the same as a mutex but allows x number of threads to enter, this can be used for example to limit the number of cpu, io or ram intensive tasks running at the same time.
 
 
+    + Task queues :
+
+    When handling requests from web clients, sometimes operations take more time to execute than we want to spend immediately. We can defer those operations by putting information about our task to be performed inside a queue, which we process later.
+    Right now there are many different pieces of software designed specifically for task queues (ActiveMQ, RabbitMQ, Gearman, Amazon SQS, and others), but there are also ad hoc methods of creating task queues in situations where queues aren’t expected.
+    If you’ve ever had a cron job that scans a database table for accounts that have been modified/ checked before or after a specific date/time, and you perform some operation based on the results of that query, you’ve already created a task queue.
+
+    - What We are going to build :
+
+    In this section we’ll talk about two different types of task queues. Our first queue will be built to execute tasks as quickly as possible in the order that they were inserted. Our second type of queue will have the ability to schedule tasks to execute at some specific time in the future.
+
+    - First-in, first-out queues | Specifications :
+
+    Let’s again look back to an example from Fake Game Company. '' To encourage users to play the game when they don’t normally do so, Fake Game Company has decided to add the option for users to opt-in to emails about marketplace sales that have completed or that have timed out. ''
+    Because outgoing email is one of those internet services that can have very high latencies and can fail, we need to keep the act of sending emails
+    for completed or timed-out sales out of the typical code flow for those operations. To do this, we’ll use a task queue to keep a record of people who need to be emailed and why, and will implement a worker process that can be run in parallel to send multiple emails at a time
+    if outgoing mail servers become slow.
+
+    - Solution :
+
+    The queue that we’ll write only needs to send emails out in a first-come, first- served manner, and will log both successes and failures. As we talked about Redis LISTs let us push and pop items from both ends with RPUSH/ LPUSH and RPOP/LPOP.
+    we’ll push emails to send onto the right end of the queue with RPUSH, and pop them off the left end of the queue with LPOP.
+    ++ Because our worker processes are only going to be performing this emailing opera- tion, we’ll use the blocking version of our list pop, BLPOP, with a timeout of 30 sec- onds. We’ll only handle item-sold messages in this version for the sake of simplicity, but adding support for sending timeout emails is also easy.
+
+![](./static/emails_queue.png)
+
+    To add an item to the queue, we’ll
+    get all of the necessary information
+    together, serialize it with JSON, and
+    RPUSH the result onto our email queue.
+
+![](./static/send_email_data_queue.png)
+
+
+    - TASK PRIORITIES
+    Sometimes when working with queues, it’s necessary to prioritize certain operations before others. In our case, maybe we want to send emails about sales that completed before we send emails about sales that expired. Or maybe we want to send password reset emails before we send out emails for an upcoming special event.
+    Remember the BLPOP/BRPOP commands—we can provide multiple LISTs in which to pop an item from; the first LIST to have any items in it will have its first item popped (or last if we’re using BRPOP).
+
+    Let’s say that we want to have three priority levels: high, medium, and low. High- priority items should be executed if they’re available. If there are no high-priority
+    items, then items in the medium-priority level should be executed. If there are neither high- nor medium-priority items, then items in the low-priority level should be exe- cuted.
+    Looking at our earlier code, we can change two lines to make that possible in the updated listing.
+
+![](./static/priority_queues.png)
+
+    - Delayed tasks :
+
+     =+ Specs : Fake Game Company has decided that they’re going to add a new feature in their game: delayed selling. Rather than putting an item up for sale now, players can tell the game to put an item up for sale in the future. It’s our job to change or replace our task queue with something that can offer this feature.
+
+    - Pull messaging :
+
+    When sending and receiving messages between two or more clients, there are two common ways of looking at how the messages are delivered. One method, called push messaging, causes the sender to spend some time making sure that all of the recipients of the message receive it. Redis has built-in commands
+    for handling push messaging called PUBLISH and SUBSCRIBE, whose drawbacks, The second method, called pull messaging, requires that the recipients of the message fetch the messages instead. Usually, messages will wait in a sort of mailbox for the recipient to fetch them.
+
+    - solution for publish/subscibe pattern limitations :
+
+    1- Though push messaging can be useful, we run into problems when clients can’t stay connected all the time for one reason or another. To address this limitation, we’ll write two different pull messaging methods that can be used as a replacement for PUBLISH/SUBSCRIBE.
+
+    + solution - Release a Mobile messaging app :
+    - Single-recipient publish/subscribe replacement :
+
+    Breaking from our game company focus, Fake Garage Startup wants to release a mobile messaging application. This application will connect to their web servers to send and receive SMS/MMS-like messages (basically a text or picture messaging replacement). The web server will be handling authentication and
+    communication with the Redis back end, and Redis will be handling the message routing/storage.
+
+    Each message will only be received by a single client, which greatly simplifies our problem. To handle messages in this way, we use a single LIST for each mobile client. Senders cause messages to be placed in the recipient’s LIST, and any time the recipi- ent’s client makes a request, it fetches the most
+    recent messages. With HTTP 1.1’s abil- ity to pipeline requests, or with more modern web socket support, our mobile client can either make a request for all waiting messages (if any), can make requests one at a time, or can fetch 10 and use LTRIM to remove the first 10 items.
+
+![](./static/sender_example.png)
+
+    : Jack is the only recipient in the channel (LIST) with too many senders.
+
+- Multiple-recipient publish/subscribe replacement :
+
+![](./static/group_chat.png)
+
+As you can see, user jason22 has seen five of six chat messages sent in chat:827, in which jason22 and jeff24 are participating.
+
+
