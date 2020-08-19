@@ -1246,3 +1246,68 @@ As you can see, user jason22 has seen five of six chat messages sent in chat:827
 
 
     -> Distributing files with Redis and Chat server need to be revised again ... to grasp the concepts.
+
+### + Search-based applications :
+
+    - Searching in Redis :
+    In a text editor or word processor, when you want to search for a word or phrase, the software will scan the document for that word or phrase. If you’ve ever used grep in Linux,
+    Unix, or OS X, or if you’ve used Windows’ built-in file search capability to find files with words or phrases, you’ve noticed that as the number and size of documents to be searched increases, it takes longer to search your files.
+    Unlike searching our local computer, searching for web pages or other content on the web is very fast, despite the significantly larger size and number of documents. In this section,
+    we’ll examine how we can change the way we think about searching through data, and subsequently reduce search times over almost any kind of word or keyword-based content search with Redis.
+
+    + Specs :
+
+    As part of their effort to help their customers find help in solving their problems, Fake Garage Startup has created a knowledge base of troubleshooting articles for user support. As the number and variety of articles has increased
+    over the last few months, the previous database-backed search has slowed substantially, and it’s time to come up with a method to search over these documents quickly. We’ve decided to use Redis, because it has all of the functionality
+    necessary to build a content search engine.
+    Our first step is to talk about how it’s even possible for us to search so much faster than scanning documents word by word.
+
+    + Basic search theory :
+    Searching for words in documents faster than scanning over them requires prepro- cessing the documents in advance. This preprocessing step is generally known as indexing, and the structures that we create are called inverted indexes.
+
+![](./static/inverted_index.png)
+
+    =+ Steps to build an inverted index:
+
+    - Fetch the Document
+    Removing of Stop Words: Stop words are most occuring and useless words in document like “I”, “the”, “we”, “is”, “an”.
+
+    - Stemming of Root Word
+    Whenever I want to search for “cat”, I want to see a document that has information about it. But the word present in the document is called “cats” or “catty” instead of “cat”. To relate the both words,
+    I’ll chop some part of each and every word I read so that I could get the “root word”. There are standard tools for performing this like “Porter’s Stemmer”.
+
+    - Record Document IDs
+    If word is already present add reference of document to index else create new entry. Add additional information like frequency of word, location of word etc.
+    Repeat for all documents and sort the words.
+
+    - Inverted index in redis :
+
+    More specifically, an inverted index of a collection of documents will take the words from each of the documents and create tables that say which documents
+    con- tain what words. So if we have two documents, docA and docB, containing just the titles lord of the rings and lord of the dance, respectively,
+    we’ll create a SET in Redis for lord that contains both docA and docB. This signifies that both docA and docB contain the word lord. The full inverted index for our two documents appears in figure 7.1.
+
+![](./static/inverted_index_example.png)
+
+    - BASIC INDEXING :
+
+    1- In order to construct our SETs of documents, we must first examine our documents for words. The process of extracting words from documents is known as parsing and tokeniza- tion; we’re producing a set of tokens (or words) that identify the document.
+
+    2- There are many different ways of produc- ing tokens. The methods used for web pages could be different from methods used for rows in a relational database, or from docu- ments from a document store. We’ll keep it simple and consider words of
+       alphabetic char- acters and apostrophes (') that are at least two characters long. This accounts for the majority of words in the English language, except for I and a, which we’ll ignore.
+
+    3- Tokenization - Remove Stop words :
+
+    One common addition to a tokenization process is the removal of words known as stop words. Stop words are words that occur so fre- quently in documents that they don’t offer a substantial amount of information, and searching for those words
+    returns too many documents to be useful. By removing stop words, not only can we improve the perfor- mance of our searches, but we can also reduce the size of our index. Figure 7.2 shows the pro- cess of tokenization and stop word removal.
+
+![](./static/tokenization.png)
+
+    - how to find stop words in a document ?
+
+    One challenge in this process is coming up with a useful list of stop words. Every group of documents will have different statistics on what words are most common, which may or may not affect stop words.
+    we include a list of stop words (fetched from http://www.textfixer.com/resources/), as well as functions to both tokenize and index a document, taking into consideration the stop words that we want to remove.
+
+![](./static/remove_stop_words.png)
+
+
+
