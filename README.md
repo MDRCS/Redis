@@ -1234,4 +1234,15 @@ ZSETs offer the ability to store a mapping of members to scores (similar to the 
 
 As you can see, user jason22 has seen five of six chat messages sent in chat:827, in which jason22 and jeff24 are participating.
 
+    - Distributing files with Redis :
 
+    When building distributed software and systems, it’s common to need to copy, distrib- ute, or process data files
+    on more than one machine. There are a few different com- mon ways of doing this with existing tools. If we have
+    a single server that will always have files to be distributed, it’s not uncommon to use NFS or Samba to mount a path or drive.
+    If we have files whose contents change little by little, it’s also common to use a piece of software called Rsync to minimize
+    the amount of data to be transferred between systems. Occasionally, when many copies need to be distributed among machines,
+    a protocol called BitTorrent can be used to reduce the load on the server by partially distributing files to multiple machines,
+    which then share their pieces among themselves.
+
+
+    -> Distributing files with Redis and Chat server need to be revised again ... to grasp the concepts.
