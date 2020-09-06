@@ -1305,9 +1305,88 @@ As you can see, user jason22 has seen five of six chat messages sent in chat:827
     - how to find stop words in a document ?
 
     One challenge in this process is coming up with a useful list of stop words. Every group of documents will have different statistics on what words are most common, which may or may not affect stop words.
-    we include a list of stop words (fetched from http://www.textfixer.com/resources/), as well as functions to both tokenize and index a document, taking into consideration the stop words that we want to remove.
+    we include a list of stop words (fetched from https://www.textfixer.com/tutorials/common-english-words.php), as well as functions to both tokenize and index a document, taking into consideration the stop words that we want to remove.
 
 ![](./static/remove_stop_words.png)
+![](./static/tokenization_indexing.png)
+
+    - REMOVING A DOCUMENT FROM THE INDEX :
+
+    If you’re in a situation where your document may have its content changed over time, you’ll want to add func- tionality to automatically remove the document from the index prior to rein- dexing the item,
+    or a method to intelligently update only those inverted indexes that the document should be added or removed from. A simple way of doing this would be to use the SET command to update a key with a JSON- encoded list of words that the document
+    had been indexed under, along with a bit of code to un-index as necessary at the start of index_document().
+
+    ++ BASIC SEARCHING :
+
+    Searching the index for a single word is easy: we fetch the set of documents in that word’s SET. But what if we wanted to find documents that contained two or more words? We could fetch the SETs of documents for all of those words,
+    and then try to find those documents that are in all of the SETs, but as we discussed in chapter 3, there are two commands in Redis that do this directly: SINTER and SINTERSTORE. Both commands will discover the items that are in all
+    of the provided SETs and, for our example, will discover the SET of documents that contain all of the words.
+
+    One of the amazing things about using inverted indexes with SET intersections is not so much what we can find (the documents we’re looking for), and it’s not even how quickly it can find the results—it’s how much information
+    the search completely ignores. When searching text the way a text editor does, a lot of useless data gets examined. But with inverted indexes, we already know what documents have each individual word, and it’s only a matter of
+    filtering through the documents that have all of the words we’re looking for.
+
+    - Searching for synonyms :
+
+    Sometimes we want to search for items with similar meanings and have them con- sidered the same, which we call synonyms (at least in this context). To handle that sit- uation, we could again fetch all of the document SETs
+    for those words and find all of the unique documents, or we could use another built-in Redis operation: SUNION or SUNIONSTORE.
+
+    Occasionally, there are times when we want to search for documents with certain words or phrases, but we want to remove documents that have other words. There are also Redis SET operations for that: SDIFF and SDIFFSTORE.
+
+    - PARSING AND EXECUTING A SEARCH :
+
+    We almost have all of the pieces necessary to perform indexing and search. We have tokenization, indexing, and the basic functions for intersection, union, and differ- ences. The remaining piece is to take a text
+    query and turn it into a search operation. Like our earlier tokenization of documents, there are many ways to tokenize search queries. We’ll use a method that allows for searching for documents that contain all of
+    the provided words, supporting both synonyms and unwanted words.
+
+    A basic search will be about finding documents that contain all of the provided words. If we have just a list of words, that’s a simple intersect() call. In the case where we want to remove unwanted words,
+    we’ll say that any word with a leading minus character (-) will be removed with difference(). To handle synonyms, we need a way of saying “This word is a synonym,” which we’ll denote by the use of the plus (+)
+    character prefix on a word. If we see a plus character leading a word, it’s considered a synonym of the word that came just before it (skipping over any unwanted words), and we’ll group synonyms together to perform a union()
+    prior to the higher-level intersect() call.
+
+![](./static/ensemble_theory.png)
+
+    - Query Parser :
+
+    Putting it all together where + denotes synonyms and - denotes unwanted words, the next listing shows the code for parsing a query into a Python list of lists that describes words that should be considered the same, and a list of words that are unwanted.
+
+![](./static/query_parser.png)
+
+    - Example :
+
+    To give this parsing function a bit of exercise, let’s say that we wanted to search our knowledge base for chat connection issues. What we really want to search for is an arti- cle with connect, connection, disconnect, or disconnection,
+    along with chat, but because we aren’t using a proxy, we want to skip any documents that include proxy or proxies. Here’s an example interaction that shows the query (formatted into groups for easier reading):
+
+    - Result :
+
+    >>> parse('''
+    connect +connection +disconnect +disconnection
+    chat
+    -proxy -proxies''')
+
+    all (list) : ([['disconnection', 'connection', 'disconnect', 'connect'], ['chat']],
+    ['proxies', 'proxy'])
+
+    - Describe our parse_search func :
+
+    Our parse function properly extracted the synonyms for connect/disconnect, kept chat separate, and discovered our unwanted proxy and proxies. We aren’t going to be passing that parsed result around (except for maybe debugging as necessary),
+    but instead are going to be calling our parse() function as part of a parse_and_search() function that union()s the individual synonym lists as necessary, intersect()ing the final list, and removing the unwanted words with difference() as necessary.
+    The full parse_and_search() function is shown in the next listing.
+
+![](./static/parse_and_search.png)
+
+    - Hardware Requirements :
+    ++ While prototyping this solution, however, we found that Redis needed about 70 MB to store 1,000,000 keys this way. Extrapolating to the 300,000,000 we would eventually need, it was looking to be around 21GB worth of data —
+       already bigger than the 17GB instance type on Amazon EC2.
 
 
+![](./static/redis_use_cases.jpg)
+
+    -> Redis - Use Case :
+
+    1- User Sessions Managements
+    2- Database
+    3- Caching service
+    4- Message Queue / PubSub Pattern
+    5- Text Search Engine
 

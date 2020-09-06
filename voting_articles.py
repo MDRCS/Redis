@@ -157,7 +157,7 @@ ONE_WEEK_IN_SECONDS = 7 * 86400                     #A
 VOTE_SCORE = 432                                    #A
 
 """
-Redis data structures that we used are are :
+Redis data structures that we used are :
 
 - zset (ordered set) for score:article and time:article
 - set for article:users

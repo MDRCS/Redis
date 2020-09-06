@@ -47,7 +47,7 @@ def update_token(conn, token, user, item=None):
 
 # <start id="_1311_14471_8270"/>
 QUIT = False
-LIMIT = 10000000
+LIMIT = 10000000 # 10 000 000 session
 
 
 def clean_sessions(conn):
