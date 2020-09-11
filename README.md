@@ -1392,4 +1392,47 @@ As you can see, user jason22 has seen five of six chat messages sent in chat:827
     6- Streaming
 
 
+### - Sorting search results :
+
+    We now have the ability to arbitrarily search for words in our indexed documents. But searching is only the first step in retrieving information that we’re looking for. After we have a list of documents,
+    we need to decide what’s important enough about each of the documents to determine its position relative to other matching documents. This ques- tion is generally known as relevance in the search world,
+    and one way of determining whether one article is more relevant than another is which article has been updated more recently.
+
+    - Determine Relevance of Documents in a Search request :
+
+    If you remember from chapter 3, the Redis SORT call allows us to sort the contents of a LIST or SET, possibly referencing external data. For each article in Fake Garage Startup’s knowledge base, we’ll also include a
+
+    HASH that stores information about the article.
+    The information we’ll store about the article
+    includes the title, the creation timestamp, the
+    timestamp for when the article was last
+    updated, and the document’s ID.
+
+![](./static/hash_documents.png)
+
+    - Caching search query result and give em a time to expire :
+
+    With documents stored in this format, we
+    can then use the SORT command to sort by one
+    of a few different attributes. We’ve been giving
+    our result SETs expiration times as a way of
+    cleaning them out shortly after we’ve finished
+    using them. But for our final SORTed result, we could keep that result around longer, while at the same time allowing
+    for the ability to re-sort, and even paginate over the results without having to perform the search again.
+    Our function for integrating this kind of caching and re-sorting can be seen in the following listing.
+
+![](./static/search_sort_func.png)
+
+    ++ When searching and sorting, we can paginate over results by updating the start and num arguments; alter the sorting
+       attribute (and order) with the sort argument; cache the results for longer or shorter with the ttl argument; and
+       reference previous search results (to save time) with the id argument.
+
+
+    - Very Important :
+
+    ++ Limitations on SORT lead to using ZSETs to support more intricate forms of document sorting, including combining scores for a composite sort order.
+
+    + In this section,
+    -> we’ll talk about ways to combine multiple scores using SETs and ZSETs, which can offer greater flexibility than calling SORT.
+
 
