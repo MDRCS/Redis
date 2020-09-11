@@ -83,6 +83,7 @@ def difference(conn, items, ttl=30, _execute=True):               #J
 
 # <start id="parse-query"/>
 QUERY_RE = re.compile("[+-]?[a-z']{2,}")                #A
+#query = "look at that query behind this result +see +request -code -cql"
 
 def parse(query):
     unwanted = set()                                    #B
@@ -90,7 +91,10 @@ def parse(query):
     current = set()                                     #D
     for match in QUERY_RE.finditer(query.lower()):      #E
         word = match.group()                            #F
+        print(match)
+        print(word)
         prefix = word[:1]                               #F
+        print(prefix)
         if prefix in '+-':                              #F
             word = word[1:]                             #F
         else:                                           #F

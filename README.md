@@ -1389,4 +1389,7 @@ As you can see, user jason22 has seen five of six chat messages sent in chat:827
     3- Caching service
     4- Message Queue / PubSub Pattern
     5- Text Search Engine
+    6- Streaming
+
+
 
