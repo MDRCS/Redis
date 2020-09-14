@@ -1435,4 +1435,63 @@ As you can see, user jason22 has seen five of six chat messages sent in chat:827
     + In this section,
     -> we’ll talk about ways to combine multiple scores using SETs and ZSETs, which can offer greater flexibility than calling SORT.
 
+### + Ad targeting :
+
+    - Ads CONTEXT :
+
+    On countless websites around the internet, we see advertisements in the form of text snippets, images, and videos. Those ads exist as a method of
+    paying website owners for their service—whether it’s search results, information about travel destinations, or even finding the definition of a word.
+
+    In this section, we’ll talk about using SETs and ZSETs to implement an ad-targeting engine.
+    If you’ve been reading these chapters sequentially, you’ve seen a variety of prob- lems and solutions, almost all of which were simplified versions
+    of much larger proj- ects and problems. But in this section, we won’t be simplifying anything. We’ll build an almost-complete ad-serving platform
+    based on software that I built and ran in a production setting for a number of months. The only major missing parts are the web server, ads, and traffic.
+
+    + What’s an ad server? :
+
+    When we talk about an ad server, what we really mean is a sometimes-small, but sophis- ticated piece of technology. Whenever we visit a web page with an ad,
+    either the web server itself or our web browser makes a request to a remote server for that ad. This ad server will be provided a variety of information about
+    how to find an ad that can earn the most money through clicks, views, or actions (I’ll explain these shortly).
+
+    In order to choose a specific ad, our server must be provided with targeting param- eters. Servers will typically receive at least basic information about the viewer’s
+    loca- tion (based on our IP address at minimum, and occasionally based on GPS information from our phone or computer), what operating system and web browser we’re using,
+    maybe the content of the page we’re on, and maybe the last few pages we’ve visited on the current website.
+
+    We’ll focus on building an ad-targeting platform that has a small amount of basic information about viewer location and the content of the page visited.
+    After we’ve seen how to pick an ad from this information, we can add other targeting parame- ters later.
+
+    -> Our first step in returning ads to the user is getting the ads into our platform in the first place.
+
+    - Indexing ads :
+
+    The process of indexing an ad is not so different from the process of indexing any other content. The primary difference is that we aren’t looking to return a list of ads
+    (or search results); we want to return a single ad. There are also some secondary dif- ferences in that ads will typically have required targeting parameters such as location, age, or gender.
+
+    -> Before we can talk about indexing an ad, we must first determine how to measure the value of an ad in a consistent manner.
+
+    + CALCULATING THE VALUE OF AN AD :
+
+    Three major types of ads are shown on web pages: cost per view, cost per click, and cost per action (or acquisition). Cost per view ads are also known as CPM or cost per mille, and are paid a
+    fixed rate per 1,000 views of the ad itself. Cost per click, or CPC, ads are paid a fixed rate per click on the ad itself. Cost per action, or CPA, ads are paid a sometimes varying rate based on actions performed on the ad-destination site.
+
+    + Making values consistent :
+
+    To greatly simplify our calculations as to the value of showing a given ad, we’ll convert all of our types of ads to have values relative to 1,000 views, generating what’s known as an estimated CPM, or eCPM.
+    CPM ads are the easiest because their value per thousand views is already provided, so eCPM = CPM. But for both CPC and CPA ads, we must cal- culate the eCPMs.
+
+    + Calculating the estimated CPM of a CPC ad :
+    If we have a CPC ad, we start with its cost per click, say $.25. We then multiply that cost by the click-through rate (CTR) on the ad. Click-through rate is the number of clicks that an ad received divided by the number of views
+    the ad received. We then multiply that result by 1,000 to get our estimated CPM for that ad. If our ad gets .2% CTR, or .002, then our calculation looks something like this: .25 x .002 x 1000 = $.50 eCPM.
+
+    + Calculating the estimated CPM of a CPA ad :
+    When we have a CPA ad, the calculation is somewhat similar to the CPC value calcula- tion. We start with the CTR of the ad, say .2%. We multiply that against the probability that the user will perform an action on the advertiser’s destination page,
+    maybe 10% or .1. We then multiply that times the value of the action performed, and again multi- ply that by 1,000 to get our estimated CPM. If our CPA is $3, our calculation would look like this: .002 x .1 x 3 x 1000 = $.60 eCPM.
+
+![](./static/calculate_cpc_cpa_cpm.png)
+
+    -> Now that we’ve calculated the basic value of an ad, let’s index an ad in preparation for targeting.
+
+    + INSERTING AN AD INTO THE INDEX :
+    To be continued ... The use case is very hard to understand.
+
 

@@ -6,6 +6,8 @@ import uuid
 
 import redis
 
+# Search Engine - Use case :
+
 AVERAGE_PER_1K = {}
 
 # <start id="tokenize-and-index"/>
@@ -336,6 +338,9 @@ def zadd_string(conn, name, *args, **kwargs):
 #B Convert string scores to integer scores
 #C Call the existing ZADD method
 #END
+
+
+# Ads Targeting - Use case :
 
 # <start id="ecpm_helpers"/>
 def cpc_to_ecpm(views, clicks, cpc):
