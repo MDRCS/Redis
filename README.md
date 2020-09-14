@@ -1494,4 +1494,54 @@ As you can see, user jason22 has seen five of six chat messages sent in chat:827
     + INSERTING AN AD INTO THE INDEX :
     To be continued ... The use case is very hard to understand.
 
+### + Job search - Use case :
+
+    If you’re anything like me, at some point in your past you’ve spent time looking through classifieds and online job-search pages, or have used a recruiting agency to try to find work. One of the first things that’s checked (after location) is required experience and/or skills.
+    In this section, we’ll talk about using Redis SETs and ZSETs to find jobs for which a candidate has all of the required skills. When you’re finished reading this section, you’ll understand another way of thinking about your problem that fits the Redis data model.
+
+    - Specs :
+
+    As a way of approaching this problem, we’ll say that Fake Garage Startup is branch- ing out in their offerings, trying to pull their individual and group chat customers into using their system to find work. Initially, they’re only offering the ability for users to search for positions in which they’re qualified.
+
+    - Solution :
+    At first glance, we might consider a straightforward solution to this problem. Start with every job having its own SET, with members being the skills that the job requires.
+    To check whether a candidate has all of the requirements for a given job, we’d add the candidate’s skills to a SET and then perform the SDIFF of the job and the candidate’s skills.
+    If there are no skills in the resulting SDIFF, then the user has all of the qualifica- tions necessary to complete the job.
+
+![](./static/add_job.png)
+![](./static/is_qualified.png)
+
+    + Approaching the problem like search (Scaling Solution) :
+    In section 7.3.3, we used SETs and ZSETs as holders for additive bonuses for optional targeting parameters. If we’re careful, we can do the same thing for groups of required targeting parameters.
+
+    ++ Rather than talk about jobs with skills, we need to flip the problem around like we did with the other search problems described in this chapter. We start with one SET per skill,
+    which stores all of the jobs that require that skill. In a required skills ZSET, we store the total number of skills that a job requires.
+
+![](./static/index_jobs.png)
+
+    ++ The only major difference is that we’re providing index_job() with preto- kenized skills, and we’re adding a member to a ZSET that keeps a record of the num- ber of skills that each job requires.
+
+    - Next Step :
+
+    To perform a search for jobs that a candidate has all of the skills for, we need to approach the search like we did with the bonuses to ad targeting in section 7.3.3. More specifically,
+    we’ll perform a ZUNIONSTORE operation over skill SETs to calculate a total score for each job. This score represents how many skills the candidate has for each of the jobs.
+
+    -> Because we have a ZSET with the total number of skills required, we can then per- form a ZINTERSTORE operation between the candidate’s ZSET and the required skills ZSET with weights -1 and 1,
+    respectively. Any job ID with a score equal to 0 in that final result ZSET is a job that the candidate has all of the required skills for. The code for implementing the search operation is shown in the following listing.
+
+![](./static/find_job.png)
+
+    Again, we first find the scores for each job. After we have the scores for each job, we subtract each job score from the total score necessary to match. In that final result, any job with a ZSET score of 0 is a job that the candidate has all of the skills for.
+
+    - Solution Improvement (Sharding) :
+
+    Depending on the number of jobs and searches that are being performed, our job- search system may or may not perform as fast as we need it to, especially with large numbers of jobs or searches. But if we apply sharding techniques that we’ll discuss in chapter 9,
+    we can break the large calculations into smaller pieces and calculate partial results bit by bit. Alternatively, if we first find the SET of jobs in a location to search for jobs, we could perform the same kind of optimization that we performed with ad tar- geting
+    in section 7.3.3, which could greatly improve job-search performance.
+
+![](./static/Exercises.png)
+
+
+
+
 

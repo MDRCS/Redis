@@ -579,6 +579,7 @@ def update_cpms(conn, ad_id):
 #M Write the word's bonus back to the per-word per-ad ZSET
 #END
 
+# Job Search - Use case :
 
 # <start id="slow_job_search"/>
 def add_job(conn, job_id, required_skills):
